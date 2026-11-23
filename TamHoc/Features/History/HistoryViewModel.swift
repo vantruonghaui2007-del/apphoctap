@@ -7,6 +7,7 @@ public final class HistoryViewModel: ObservableObject {
     @Published public private(set) var errorMessage: String?
     @Published public private(set) var unsupportedSchemaCount: Int = 0
     @Published public private(set) var quarantinedCount: Int = 0
+    @Published public var exportFileURL: URL?
 
     private let repository: SessionRepository
 
@@ -14,9 +15,10 @@ public final class HistoryViewModel: ObservableObject {
         self.repository = repository
     }
 
-    public func load() async {
+    public func load(now: Date = Date()) async {
         errorMessage = nil
         do {
+            try? await RetentionPolicy.pruneRepository(repository, now: now)
             let result = try await repository.loadAll()
             self.records = result.records
             self.unsupportedSchemaCount = result.unsupportedSchemaFiles.count
@@ -46,5 +48,29 @@ public final class HistoryViewModel: ObservableObject {
             }
         }
         records.removeAll()
+    }
+
+    public func prepareCSVExport() {
+        let data = SessionExporter.csv(records: records)
+        writeExportTempFile(data: data, filename: "TamHoc-LichSu.csv")
+    }
+
+    public func prepareJSONExport() {
+        do {
+            let data = try SessionExporter.json(records: records)
+            writeExportTempFile(data: data, filename: "TamHoc-LichSu.json")
+        } catch {
+            errorMessage = "Không thể tạo tệp JSON xuất dữ liệu."
+        }
+    }
+
+    private func writeExportTempFile(data: Data, filename: String) {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent(filename)
+        do {
+            try data.write(to: url, options: [.atomic])
+            exportFileURL = url
+        } catch {
+            errorMessage = "Không thể chuẩn bị tệp để chia sẻ."
+        }
     }
 }

@@ -1,9 +1,10 @@
 import SwiftUI
+import UIKit
 import StudyCore
 
 public struct HistoryView: View {
     @ObservedObject var viewModel: HistoryViewModel
-    @State private var selectedRecord: SessionRecord?
+    @State private var activeSheet: HistorySheet?
 
     public init(viewModel: HistoryViewModel) {
         self.viewModel = viewModel
@@ -35,7 +36,7 @@ public struct HistoryView: View {
             } else {
                 ForEach(viewModel.records, id: \.id) { record in
                     Button {
-                        selectedRecord = record
+                        activeSheet = .detail(record)
                     } label: {
                         HStack {
                             VStack(alignment: .leading, spacing: 4) {
@@ -67,12 +68,41 @@ public struct HistoryView: View {
             }
         }
         .navigationTitle("Lịch sử")
+        .toolbar {
+            ToolbarItem(placement: .navigationBarLeading) {
+                if !viewModel.records.isEmpty {
+                    Menu {
+                        Button("Xuất CSV") {
+                            viewModel.prepareCSVExport()
+                        }
+                        Button("Xuất JSON") {
+                            viewModel.prepareJSONExport()
+                        }
+                    } label: {
+                        Label("Xuất", systemImage: "square.and.arrow.up")
+                    }
+                    .accessibilityLabel("Xuất lịch sử học")
+                }
+            }
+        }
         .task {
             await viewModel.load()
         }
-        .sheet(item: $selectedRecord) { record in
-            AppNavigationContainer {
-                SessionDetailView(record: record)
+        .onValueChange(of: viewModel.exportFileURL) { url in
+            if let url = url {
+                activeSheet = .export(url)
+            }
+        }
+        .sheet(item: $activeSheet, onDismiss: {
+            viewModel.exportFileURL = nil
+        }) { sheet in
+            switch sheet {
+            case .detail(let record):
+                AppNavigationContainer {
+                    SessionDetailView(record: record)
+                }
+            case .export(let url):
+                ShareSheetRepresentable(activityItems: [url])
             }
         }
     }
@@ -84,6 +114,34 @@ public struct HistoryView: View {
         formatter.locale = Locale(identifier: "vi_VN")
         return formatter.string(from: date)
     }
+}
+
+private enum HistorySheet: Identifiable {
+    case detail(SessionRecord)
+    case export(URL)
+
+    var id: String {
+        switch self {
+        case .detail(let record):
+            return "detail-\(record.id.uuidString)"
+        case .export(let url):
+            return "export-\(url.absoluteString)"
+        }
+    }
+}
+
+public struct ShareSheetRepresentable: UIViewControllerRepresentable {
+    public let activityItems: [Any]
+
+    public init(activityItems: [Any]) {
+        self.activityItems = activityItems
+    }
+
+    public func makeUIViewController(context: Context) -> UIActivityViewController {
+        UIActivityViewController(activityItems: activityItems, applicationActivities: nil)
+    }
+
+    public func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
 }
 
 extension SessionRecord: Identifiable {}

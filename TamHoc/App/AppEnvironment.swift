@@ -96,6 +96,7 @@ final class AppEnvironment: ObservableObject {
         }
 
         try? await coordinator.recoverUnfinishedSessions()
+        try? await RetentionPolicy.pruneRepository(sessionRepository)
         self.didFinishBootstrap = true
     }
 
