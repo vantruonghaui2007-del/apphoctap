@@ -103,6 +103,8 @@ public final class CalibrationViewModel: ObservableObject {
                     self?.runState = .failed("Chưa có quyền camera. Bạn có thể cấp quyền trong Cài đặt iOS hoặc chuyển sang chế độ Chỉ đồng hồ.")
                 case .cameraUnavailable:
                     self?.runState = .failed("Camera trước không khả dụng trên thiết bị này. Hãy dùng chế độ Chỉ đồng hồ.")
+                case .thermalCritical:
+                    self?.runState = .failed("Thiết bị đang quá nóng, tạm thời không thể hiệu chỉnh camera. Hãy để máy nguội hoặc chuyển sang chế độ Chỉ đồng hồ.")
                 }
                 return
             } catch {

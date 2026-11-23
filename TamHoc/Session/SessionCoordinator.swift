@@ -8,6 +8,7 @@ public enum CoordinatorError: Error, Equatable {
     case calibrationRequired
     case startCancelled
     case invalidClock
+    case thermalCritical
 }
 
 @MainActor
@@ -78,10 +79,12 @@ public final class SessionCoordinator: ObservableObject {
     private let warningPlayer: WarningPlaying
     private let idleTimerController: IdleTimerControlling
     private let backgroundTaskManager: BackgroundTaskManaging
+    private let thermalStateProvider: @Sendable () -> ProcessInfo.ThermalState
 
     private var engine: SessionEngine?
     private var activeGeneration: UUID?
     private var activeCaptureToken: UUID?
+    private var preStartThermalToken: UUID?
     private var pendingGeneration: UUID?
     private var activeCalibration: Calibration?
     private var currentActivity: ActivityState
@@ -108,7 +111,8 @@ public final class SessionCoordinator: ObservableObject {
         warningPlayer: WarningPlaying,
         idleTimerController: IdleTimerControlling? = nil,
         backgroundTaskManager: BackgroundTaskManaging? = nil,
-        initialActivity: ActivityState = .active
+        initialActivity: ActivityState = .active,
+        thermalStateProvider: @escaping @Sendable () -> ProcessInfo.ThermalState = { ProcessInfo.processInfo.thermalState }
     ) {
         self.clock = clock
         self.lockMonitor = lockMonitor
@@ -118,6 +122,7 @@ public final class SessionCoordinator: ObservableObject {
         self.idleTimerController = idleTimerController ?? UIApplicationIdleTimerController()
         self.backgroundTaskManager = backgroundTaskManager ?? UIApplicationBackgroundTaskManager()
         self.currentActivity = initialActivity
+        self.thermalStateProvider = thermalStateProvider
     }
 
     public func recoverUnfinishedSessions() async throws {
@@ -148,6 +153,9 @@ public final class SessionCoordinator: ObservableObject {
             guard calibration != nil else {
                 throw CoordinatorError.calibrationRequired
             }
+            guard thermalStateProvider() != .critical else {
+                throw CoordinatorError.thermalCritical
+            }
         }
 
         let generation = UUID()
@@ -159,9 +167,24 @@ public final class SessionCoordinator: ObservableObject {
         persistenceWarningMessage = nil
 
         if configuration.presenceMode == .cameraVerified, let calibration = calibration {
+            let preStartEvents = presenceMonitor.events
+            preStartThermalToken = nil
+            let preStartTask = Task { [weak self] in
+                for await event in preStartEvents {
+                    guard !Task.isCancelled else { break }
+                    if event.generation == initialCaptureToken,
+                       case .unknown(.thermal) = event.sample.value {
+                        self?.preStartThermalToken = initialCaptureToken
+                        break
+                    }
+                }
+            }
+
             do {
                 try await presenceMonitor.start(calibration: calibration, generation: initialCaptureToken)
             } catch {
+                preStartTask.cancel()
+                preStartThermalToken = nil
                 if pendingGeneration == generation {
                     pendingGeneration = nil
                     activeCaptureToken = nil
@@ -169,6 +192,22 @@ public final class SessionCoordinator: ObservableObject {
                 }
                 await presenceMonitor.stop()
                 throw error
+            }
+
+            await Task.yield()
+            await Task.yield()
+            preStartTask.cancel()
+            let sawThermalDuringStart = (preStartThermalToken == initialCaptureToken)
+            preStartThermalToken = nil
+
+            if sawThermalDuringStart || thermalStateProvider() == .critical {
+                activeCaptureToken = nil
+                await presenceMonitor.stop()
+                if pendingGeneration == generation {
+                    pendingGeneration = nil
+                }
+                isStarting = false
+                throw CoordinatorError.thermalCritical
             }
 
             if pendingGeneration != generation || Task.isCancelled || currentActivity != .active {
@@ -237,6 +276,17 @@ public final class SessionCoordinator: ObservableObject {
             pendingGeneration = nil
             isStarting = false
             throw CoordinatorError.guidedAccessRequired
+        }
+
+        if configuration.presenceMode == .cameraVerified && thermalStateProvider() == .critical {
+            if let _ = try? initialEngine.handle(.finish(.thermalLimit), at: clock.now()) {
+                try? await saveSerialized(initialEngine.record)
+            }
+            activeCaptureToken = nil
+            await presenceMonitor.stop()
+            pendingGeneration = nil
+            isStarting = false
+            throw CoordinatorError.thermalCritical
         }
 
         self.pendingGeneration = nil

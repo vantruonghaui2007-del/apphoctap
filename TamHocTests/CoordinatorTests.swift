@@ -432,4 +432,52 @@ final class CoordinatorTests: XCTestCase {
         XCTAssertNil(coordinator.snapshot)
         XCTAssertFalse(idle.isAwakeDisabled)
     }
+
+    func testStartRejectsWhenThermalCriticalAtPreflight() async throws {
+        let clock = FakeClock(monotonicSeconds: 0)
+        let lock = FakeGuidedAccessMonitor(isEnabled: true)
+        let presence = FakePresenceMonitor()
+        let repo = MockSessionRepository()
+        let coordinator = SessionCoordinator(
+            clock: clock,
+            lockMonitor: lock,
+            presenceMonitor: presence,
+            repository: repo,
+            warningPlayer: SpyWarningPlayer(),
+            idleTimerController: FakeIdleTimerController(),
+            backgroundTaskManager: FakeBackgroundTaskManager(),
+            thermalStateProvider: { .critical }
+        )
+
+        do {
+            try await coordinator.start(configuration: try cameraConfig(), calibration: .defaultCentered)
+            XCTFail("Expected CoordinatorError.thermalCritical")
+        } catch let err as CoordinatorError {
+            XCTAssertEqual(err, .thermalCritical)
+        }
+
+        XCTAssertNil(coordinator.snapshot)
+        XCTAssertFalse(presence.isCapturing)
+        XCTAssertEqual(presence.startCount, 0)
+    }
+
+    func testStartRejectsWhenMonitorEmitsThermalDuringStart() async throws {
+        let lock = FakeGuidedAccessMonitor(isEnabled: true)
+        let presence = FakePresenceMonitor()
+        presence.emitThermalDuringStart = true
+        let idle = FakeIdleTimerController()
+        let coordinator = makeCoordinator(lock: lock, presence: presence, idle: idle)
+
+        do {
+            try await coordinator.start(configuration: try cameraConfig(), calibration: .defaultCentered)
+            XCTFail("Expected CoordinatorError.thermalCritical when monitor emits thermal during start")
+        } catch let err as CoordinatorError {
+            XCTAssertEqual(err, .thermalCritical)
+        }
+
+        XCTAssertNil(coordinator.snapshot)
+        XCTAssertFalse(presence.isCapturing)
+        XCTAssertGreaterThanOrEqual(presence.stopCount, 1)
+        XCTAssertFalse(idle.isAwakeDisabled)
+    }
 }

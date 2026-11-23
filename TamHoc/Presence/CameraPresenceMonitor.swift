@@ -25,6 +25,7 @@ public enum PresenceMonitorError: Error, Equatable {
     case permissionDenied
     case permissionRestricted
     case cameraUnavailable
+    case thermalCritical
 }
 
 public enum CameraAuthorizationState: Equatable, Sendable {
@@ -269,6 +270,7 @@ public final class CameraPresenceMonitor: PresenceMonitoring {
     private let clock: SessionClock
     private let authorizer: CameraAuthorizing
     private let detector: PersonDetecting
+    private let thermalStateProvider: @Sendable () -> ProcessInfo.ThermalState
     private let broadcaster = StreamBroadcaster<PresenceMonitorEvent>()
     private let frameCoordinator: FrameAnalysisCoordinator
 
@@ -290,11 +292,13 @@ public final class CameraPresenceMonitor: PresenceMonitoring {
     public init(
         clock: SessionClock = SystemSessionClock(),
         authorizer: CameraAuthorizing = SystemCameraAuthorizer(),
-        detector: PersonDetecting = VisionPersonDetector()
+        detector: PersonDetecting = VisionPersonDetector(),
+        thermalStateProvider: @escaping @Sendable () -> ProcessInfo.ThermalState = { ProcessInfo.processInfo.thermalState }
     ) {
         self.clock = clock
         self.authorizer = authorizer
         self.detector = detector
+        self.thermalStateProvider = thermalStateProvider
         let broadcaster = self.broadcaster
         self.frameCoordinator = FrameAnalysisCoordinator(
             clock: clock,
@@ -344,12 +348,10 @@ public final class CameraPresenceMonitor: PresenceMonitoring {
             throw CancellationError()
         }
 
-        let thermal = ProcessInfo.processInfo.thermalState
+        let thermal = thermalStateProvider()
         if thermal == .critical {
-            activeGeneration = generation
-            frameCoordinator.activate(generation: generation, calibration: calibration, thermalState: thermal)
-            frameCoordinator.emitIssue(.thermal)
-            return
+            desiredRunToken = nil
+            throw PresenceMonitorError.thermalCritical
         }
 
         let session = AVCaptureSession()

@@ -372,4 +372,24 @@ final class PresenceTests: XCTestCase {
         )
         XCTAssertEqual(result, .unknown(.lowLight))
     }
+
+    @MainActor
+    func testCameraStartRejectsWhenThermalCritical() async {
+        let monitor = CameraPresenceMonitor(
+            clock: FakeClock(),
+            authorizer: FakeCameraAuthorizer(status: .authorized, frontCameraAvailable: true),
+            detector: VisionPersonDetector(),
+            thermalStateProvider: { .critical }
+        )
+
+        do {
+            try await monitor.start(calibration: .defaultCentered, generation: UUID())
+            XCTFail("Expected thermalCritical error when thermal state is critical")
+        } catch let error as PresenceMonitorError {
+            XCTAssertEqual(error, .thermalCritical)
+        } catch {
+            XCTFail("Unexpected error: \(error)")
+        }
+        XCTAssertNil(monitor.previewCaptureSession)
+    }
 }

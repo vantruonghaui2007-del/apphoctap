@@ -78,6 +78,9 @@ public final class SessionViewModel: ObservableObject {
         } catch PresenceMonitorError.cameraUnavailable {
             errorMessage = "Camera không khả dụng. Hãy chuyển sang chế độ Chỉ đồng hồ."
             return false
+        } catch PresenceMonitorError.thermalCritical, CoordinatorError.thermalCritical {
+            errorMessage = "Thiết bị đang quá nóng, tạm thời không thể dùng camera. Hãy để máy nguội hoặc chuyển sang chế độ Chỉ đồng hồ."
+            return false
         } catch CoordinatorError.startCancelled {
             return false
         } catch {

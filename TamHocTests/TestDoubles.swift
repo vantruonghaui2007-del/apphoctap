@@ -72,6 +72,7 @@ final class FakePresenceMonitor: PresenceMonitoring {
     var startedGenerations: [UUID] = []
     var startDelayNanoseconds: UInt64 = 0
     var errorOnStart: Error?
+    var emitThermalDuringStart = false
 
     private var shouldSuspendNextStart = false
     private var suspendedContinuation: CheckedContinuation<Void, Never>?
@@ -116,6 +117,15 @@ final class FakePresenceMonitor: PresenceMonitoring {
         }
         if let errorOnStart = errorOnStart {
             throw errorOnStart
+        }
+        if emitThermalDuringStart {
+            broadcaster.yield(
+                PresenceMonitorEvent(
+                    generation: generation,
+                    sample: PresenceSample(sequence: 1, capturedMonotonicSeconds: 0, value: .unknown(.thermal))
+                )
+            )
+            return
         }
         isCapturing = true
     }
