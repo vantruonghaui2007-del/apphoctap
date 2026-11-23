@@ -110,7 +110,7 @@ final class PresenceTests: XCTestCase {
         )
     }
 
-    func testSampleThrottleAndSingleInflightFrame() throws {
+    func testSingleInflightFrameDropsOverlappingFrames() throws {
         let clock = FakeClock(monotonicSeconds: 0)
         let semaphore = DispatchSemaphore(value: 0)
         let entered = DispatchSemaphore(value: 0)
@@ -120,7 +120,7 @@ final class PresenceTests: XCTestCase {
             let release: DispatchSemaphore
             func detect(pixelBuffer: CVPixelBuffer, orientation: CGImagePropertyOrientation, calibration: Calibration) throws -> PresenceValue {
                 entered.signal()
-                release.wait()
+                _ = release.wait(timeout: .now() + 2.0)
                 return .present
             }
         }
@@ -140,47 +140,70 @@ final class PresenceTests: XCTestCase {
         coordinator.activate(generation: gen, calibration: .defaultCentered, thermalState: .nominal)
         let frame = try makeSolidBGRA(brightness: 180)
 
-        // Launch first frame in background so it stays inflight
         let group = DispatchGroup()
+        var firstAccepted = false
         group.enter()
         DispatchQueue.global().async {
-            let accepted = coordinator.processFrame(frame)
-            XCTAssertTrue(accepted)
+            firstAccepted = coordinator.processFrame(frame)
             group.leave()
         }
-        entered.wait()
+        defer { semaphore.signal() }
 
-        // While first frame is inflight, even later timestamp must drop
+        XCTAssertEqual(entered.wait(timeout: .now() + 2.0), .success)
+
+        // While first frame is inflight, a later frame must be dropped without blocking or invoking detector
         clock.advance(by: 1.0)
         XCTAssertFalse(coordinator.processFrame(frame))
 
         semaphore.signal()
-        group.wait()
-
-        // Within 0.5s throttle interval -> dropped
-        clock.advance(by: 0.2)
-        XCTAssertFalse(coordinator.processFrame(frame))
-
-        // Thermal serious throttles to 1 Hz
-        coordinator.updateThermalState(.serious)
-        clock.advance(by: 0.6) // total 0.8s since last -> allowed at 2Hz, dropped at 1Hz
-        XCTAssertFalse(coordinator.processFrame(frame))
-
-        clock.advance(by: 0.5) // >= 1.0s -> accepted
-        let g2 = DispatchGroup()
-        g2.enter()
-        DispatchQueue.global().async {
-            XCTAssertTrue(coordinator.processFrame(frame))
-            g2.leave()
-        }
-        entered.wait()
-        semaphore.signal()
-        g2.wait()
+        XCTAssertEqual(group.wait(timeout: .now() + 2.0), .success)
+        XCTAssertTrue(firstAccepted)
 
         lock.lock()
         let count = emitted.count
         lock.unlock()
-        XCTAssertEqual(count, 2)
+        XCTAssertEqual(count, 1)
+    }
+
+    func testSampleThrottleNormalAndSeriousThermal() throws {
+        struct InstantDetector: PersonDetecting {
+            func detect(pixelBuffer: CVPixelBuffer, orientation: CGImagePropertyOrientation, calibration: Calibration) throws -> PresenceValue {
+                .present
+            }
+        }
+
+        let clock = FakeClock(monotonicSeconds: 0)
+        var emitted: [PresenceMonitorEvent] = []
+        let coordinator = FrameAnalysisCoordinator(
+            clock: clock,
+            detector: InstantDetector()
+        ) { event in
+            emitted.append(event)
+        }
+
+        coordinator.activate(generation: UUID(), calibration: .defaultCentered, thermalState: .nominal)
+        let frame = try makeSolidBGRA(brightness: 180)
+
+        // t = 0.0 -> accepted
+        XCTAssertTrue(coordinator.processFrame(frame))
+
+        // t = 0.2 (< 0.5s) -> dropped
+        clock.set(monotonicSeconds: 0.2)
+        XCTAssertFalse(coordinator.processFrame(frame))
+
+        // t = 0.5 (>= 0.5s) -> accepted
+        clock.set(monotonicSeconds: 0.5)
+        XCTAssertTrue(coordinator.processFrame(frame))
+
+        // Thermal serious throttles to 1 Hz (1.0s interval)
+        coordinator.updateThermalState(.serious)
+        clock.set(monotonicSeconds: 1.1) // 0.6s since 0.5 -> allowed at 2Hz, dropped at 1Hz
+        XCTAssertFalse(coordinator.processFrame(frame))
+
+        clock.set(monotonicSeconds: 1.5) // 1.0s since 0.5 -> accepted
+        XCTAssertTrue(coordinator.processFrame(frame))
+
+        XCTAssertEqual(emitted.count, 3)
     }
 
     @MainActor
@@ -231,7 +254,7 @@ final class PresenceTests: XCTestCase {
             let release: DispatchSemaphore
             func detect(pixelBuffer: CVPixelBuffer, orientation: CGImagePropertyOrientation, calibration: Calibration) throws -> PresenceValue {
                 entered.signal()
-                release.wait()
+                _ = release.wait(timeout: .now() + 2.0)
                 return .present
             }
         }
@@ -257,12 +280,13 @@ final class PresenceTests: XCTestCase {
             _ = coordinator.processFrame(frame)
             group.leave()
         }
+        defer { release.signal() }
 
-        entered.wait()
+        XCTAssertEqual(entered.wait(timeout: .now() + 2.0), .success)
         // Stop / deactivate while detector is still running for oldGen
         coordinator.deactivate()
         release.signal()
-        group.wait()
+        XCTAssertEqual(group.wait(timeout: .now() + 2.0), .success)
 
         lock.lock()
         let count = emitted.count
