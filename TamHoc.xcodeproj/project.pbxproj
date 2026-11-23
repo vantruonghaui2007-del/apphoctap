@@ -10,29 +10,32 @@
 		BF0000000000000000001005 /* AppEnvironment.swift in Sources */ = {isa = PBXBuildFile; fileRef = F10000000000000000001004; };
 		BF0000000000000000001007 /* TamHocApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = F10000000000000000001006; };
 		BF000000000000000000100A /* GuidedAccessMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = F10000000000000000001009; };
-		BF000000000000000000100D /* Calibration.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1000000000000000000100C; };
-		BF0000000000000000001010 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = F1000000000000000000100F; };
-		BF0000000000000000001013 /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = VG0000000000000000001012; };
-		BF0000000000000000001016 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = F10000000000000000001015; };
-		BF0000000000000000001019 /* AppSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = F10000000000000000001018; };
-		BF000000000000000000101B /* FileSessionRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1000000000000000000101A; };
-		BF000000000000000000101D /* SessionRecovery.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1000000000000000000101C; };
-		BF000000000000000000101F /* SettingsRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1000000000000000000101E; };
-		BF0000000000000000001023 /* AvailabilityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F10000000000000000001022; };
-		BF0000000000000000001026 /* RepositoryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F10000000000000000001025; };
-		BF000000000000000000102F /* StudyCore in Frameworks */ = {isa = PBXBuildFile; productRef = PD000000000000000000102D; };
-		BF0000000000000000001030 /* StudyCore in Frameworks */ = {isa = PBXBuildFile; productRef = PD000000000000000000102E; };
+		BF000000000000000000100D /* AppActivityMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1000000000000000000100C; };
+		BF0000000000000000001010 /* Calibration.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1000000000000000000100F; };
+		BF0000000000000000001013 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = F10000000000000000001012; };
+		BF0000000000000000001016 /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = VG0000000000000000001015; };
+		BF0000000000000000001019 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = F10000000000000000001018; };
+		BF000000000000000000101C /* AppSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1000000000000000000101B; };
+		BF000000000000000000101E /* FileSessionRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1000000000000000000101D; };
+		BF0000000000000000001020 /* SessionRecovery.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1000000000000000000101F; };
+		BF0000000000000000001022 /* SettingsRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = F10000000000000000001021; };
+		BF0000000000000000001026 /* AvailabilityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F10000000000000000001025; };
+		BF0000000000000000001028 /* GuidedAccessTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F10000000000000000001027; };
+		BF000000000000000000102B /* RepositoryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1000000000000000000102A; };
+		BF000000000000000000102D /* TestDoubles.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1000000000000000000102C; };
+		BF0000000000000000001036 /* StudyCore in Frameworks */ = {isa = PBXBuildFile; productRef = PD0000000000000000001034; };
+		BF0000000000000000001037 /* StudyCore in Frameworks */ = {isa = PBXBuildFile; productRef = PD0000000000000000001035; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
-		PX000000000000000000103A /* PBXContainerItemProxy */ = {
+		PX0000000000000000001041 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = AA0000000000000000000010 /* Project object */;
 			proxyType = 1;
 			remoteGlobalIDString = AA0000000000000000000001;
 			remoteInfo = TamHoc;
 		};
-		PX000000000000000000103C /* PBXContainerItemProxy */ = {
+		PX0000000000000000001043 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = AA0000000000000000000010 /* Project object */;
 			proxyType = 1;
@@ -50,39 +53,42 @@
 		F10000000000000000001004 /* AppEnvironment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "AppEnvironment.swift"; path = "AppEnvironment.swift"; sourceTree = "<group>"; };
 		F10000000000000000001006 /* TamHocApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "TamHocApp.swift"; path = "TamHocApp.swift"; sourceTree = "<group>"; };
 		F10000000000000000001009 /* GuidedAccessMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "GuidedAccessMonitor.swift"; path = "GuidedAccessMonitor.swift"; sourceTree = "<group>"; };
-		F1000000000000000000100C /* Calibration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "Calibration.swift"; path = "Calibration.swift"; sourceTree = "<group>"; };
-		F1000000000000000000100F /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; name = "Assets.xcassets"; path = "Assets.xcassets"; sourceTree = "<group>"; };
-		F10000000000000000001011 /* vi */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = "vi"; path = "vi.lproj/Localizable.strings"; sourceTree = "<group>"; };
-		F10000000000000000001014 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; name = "Info.plist"; path = "Info.plist"; sourceTree = "<group>"; };
-		F10000000000000000001015 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; name = "PrivacyInfo.xcprivacy"; path = "PrivacyInfo.xcprivacy"; sourceTree = "<group>"; };
-		F10000000000000000001018 /* AppSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "AppSettings.swift"; path = "AppSettings.swift"; sourceTree = "<group>"; };
-		F1000000000000000000101A /* FileSessionRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "FileSessionRepository.swift"; path = "FileSessionRepository.swift"; sourceTree = "<group>"; };
-		F1000000000000000000101C /* SessionRecovery.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "SessionRecovery.swift"; path = "SessionRecovery.swift"; sourceTree = "<group>"; };
-		F1000000000000000000101E /* SettingsRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "SettingsRepository.swift"; path = "SettingsRepository.swift"; sourceTree = "<group>"; };
-		F10000000000000000001022 /* AvailabilityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "AvailabilityTests.swift"; path = "AvailabilityTests.swift"; sourceTree = "<group>"; };
-		F10000000000000000001024 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; name = "Info.plist"; path = "Info.plist"; sourceTree = "<group>"; };
-		F10000000000000000001025 /* RepositoryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "RepositoryTests.swift"; path = "RepositoryTests.swift"; sourceTree = "<group>"; };
-		F10000000000000000001028 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; name = "Info.plist"; path = "Info.plist"; sourceTree = "<group>"; };
+		F1000000000000000000100C /* AppActivityMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "AppActivityMonitor.swift"; path = "AppActivityMonitor.swift"; sourceTree = "<group>"; };
+		F1000000000000000000100F /* Calibration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "Calibration.swift"; path = "Calibration.swift"; sourceTree = "<group>"; };
+		F10000000000000000001012 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; name = "Assets.xcassets"; path = "Assets.xcassets"; sourceTree = "<group>"; };
+		F10000000000000000001014 /* vi */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = "vi"; path = "vi.lproj/Localizable.strings"; sourceTree = "<group>"; };
+		F10000000000000000001017 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; name = "Info.plist"; path = "Info.plist"; sourceTree = "<group>"; };
+		F10000000000000000001018 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; name = "PrivacyInfo.xcprivacy"; path = "PrivacyInfo.xcprivacy"; sourceTree = "<group>"; };
+		F1000000000000000000101B /* AppSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "AppSettings.swift"; path = "AppSettings.swift"; sourceTree = "<group>"; };
+		F1000000000000000000101D /* FileSessionRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "FileSessionRepository.swift"; path = "FileSessionRepository.swift"; sourceTree = "<group>"; };
+		F1000000000000000000101F /* SessionRecovery.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "SessionRecovery.swift"; path = "SessionRecovery.swift"; sourceTree = "<group>"; };
+		F10000000000000000001021 /* SettingsRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "SettingsRepository.swift"; path = "SettingsRepository.swift"; sourceTree = "<group>"; };
+		F10000000000000000001025 /* AvailabilityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "AvailabilityTests.swift"; path = "AvailabilityTests.swift"; sourceTree = "<group>"; };
+		F10000000000000000001027 /* GuidedAccessTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "GuidedAccessTests.swift"; path = "GuidedAccessTests.swift"; sourceTree = "<group>"; };
+		F10000000000000000001029 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; name = "Info.plist"; path = "Info.plist"; sourceTree = "<group>"; };
+		F1000000000000000000102A /* RepositoryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "RepositoryTests.swift"; path = "RepositoryTests.swift"; sourceTree = "<group>"; };
+		F1000000000000000000102C /* TestDoubles.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "TestDoubles.swift"; path = "TestDoubles.swift"; sourceTree = "<group>"; };
+		F1000000000000000000102F /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; name = "Info.plist"; path = "Info.plist"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
-		PH0000000000000000001032 /* Frameworks */ = {
+		PH0000000000000000001039 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				BF000000000000000000102F /* StudyCore in Frameworks */,
+				BF0000000000000000001036 /* StudyCore in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		PH0000000000000000001035 /* Frameworks */ = {
+		PH000000000000000000103C /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				BF0000000000000000001030 /* StudyCore in Frameworks */,
+				BF0000000000000000001037 /* StudyCore in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		PH0000000000000000001038 /* Frameworks */ = {
+		PH000000000000000000103F /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -121,73 +127,85 @@
 			path = "Lock";
 			sourceTree = "<group>";
 		};
-		G2000000000000000000100E /* Presence */ = {
+		G2000000000000000000100E /* Platform */ = {
 			isa = PBXGroup;
 			children = (
-				F1000000000000000000100C /* Calibration.swift */,
+				F1000000000000000000100C /* AppActivityMonitor.swift */,
+			);
+			name = "Platform";
+			path = "Platform";
+			sourceTree = "<group>";
+		};
+		G20000000000000000001011 /* Presence */ = {
+			isa = PBXGroup;
+			children = (
+				F1000000000000000000100F /* Calibration.swift */,
 			);
 			name = "Presence";
 			path = "Presence";
 			sourceTree = "<group>";
 		};
-		G20000000000000000001017 /* Resources */ = {
+		G2000000000000000000101A /* Resources */ = {
 			isa = PBXGroup;
 			children = (
-				F1000000000000000000100F /* Assets.xcassets */,
-				VG0000000000000000001012 /* Localizable.strings */,
-				F10000000000000000001014 /* Info.plist */,
-				F10000000000000000001015 /* PrivacyInfo.xcprivacy */,
+				F10000000000000000001012 /* Assets.xcassets */,
+				VG0000000000000000001015 /* Localizable.strings */,
+				F10000000000000000001017 /* Info.plist */,
+				F10000000000000000001018 /* PrivacyInfo.xcprivacy */,
 			);
 			name = "Resources";
 			path = "Resources";
 			sourceTree = "<group>";
 		};
-		G20000000000000000001020 /* Storage */ = {
+		G20000000000000000001023 /* Storage */ = {
 			isa = PBXGroup;
 			children = (
-				F10000000000000000001018 /* AppSettings.swift */,
-				F1000000000000000000101A /* FileSessionRepository.swift */,
-				F1000000000000000000101C /* SessionRecovery.swift */,
-				F1000000000000000000101E /* SettingsRepository.swift */,
+				F1000000000000000000101B /* AppSettings.swift */,
+				F1000000000000000000101D /* FileSessionRepository.swift */,
+				F1000000000000000000101F /* SessionRecovery.swift */,
+				F10000000000000000001021 /* SettingsRepository.swift */,
 			);
 			name = "Storage";
 			path = "Storage";
 			sourceTree = "<group>";
 		};
-		G20000000000000000001021 /* TamHoc */ = {
+		G20000000000000000001024 /* TamHoc */ = {
 			isa = PBXGroup;
 			children = (
 				G20000000000000000001008 /* App */,
 				G2000000000000000000100B /* Lock */,
-				G2000000000000000000100E /* Presence */,
-				G20000000000000000001017 /* Resources */,
-				G20000000000000000001020 /* Storage */,
+				G2000000000000000000100E /* Platform */,
+				G20000000000000000001011 /* Presence */,
+				G2000000000000000000101A /* Resources */,
+				G20000000000000000001023 /* Storage */,
 			);
 			name = "TamHoc";
 			path = "TamHoc";
 			sourceTree = "<group>";
 		};
-		G20000000000000000001027 /* TamHocTests */ = {
+		G2000000000000000000102E /* TamHocTests */ = {
 			isa = PBXGroup;
 			children = (
-				F10000000000000000001022 /* AvailabilityTests.swift */,
-				F10000000000000000001024 /* Info.plist */,
-				F10000000000000000001025 /* RepositoryTests.swift */,
+				F10000000000000000001025 /* AvailabilityTests.swift */,
+				F10000000000000000001027 /* GuidedAccessTests.swift */,
+				F10000000000000000001029 /* Info.plist */,
+				F1000000000000000000102A /* RepositoryTests.swift */,
+				F1000000000000000000102C /* TestDoubles.swift */,
 			);
 			name = "TamHocTests";
 			path = "TamHocTests";
 			sourceTree = "<group>";
 		};
-		G20000000000000000001029 /* TamHocUITests */ = {
+		G20000000000000000001030 /* TamHocUITests */ = {
 			isa = PBXGroup;
 			children = (
-				F10000000000000000001028 /* Info.plist */,
+				F1000000000000000000102F /* Info.plist */,
 			);
 			name = "TamHocUITests";
 			path = "TamHocUITests";
 			sourceTree = "<group>";
 		};
-		GP000000000000000000102A /* Products */ = {
+		GP0000000000000000001031 /* Products */ = {
 			isa = PBXGroup;
 			children = (
 				AA0000000000000000000101 /* TamHoc.app */,
@@ -197,14 +215,14 @@
 			name = "Products";
 			sourceTree = "<group>";
 		};
-		GR000000000000000000102B /* Root */ = {
+		GR0000000000000000001032 /* Root */ = {
 			isa = PBXGroup;
 			children = (
 				G10000000000000000001003 /* Config */,
-				G20000000000000000001021 /* TamHoc */,
-				G20000000000000000001027 /* TamHocTests */,
-				G20000000000000000001029 /* TamHocUITests */,
-				GP000000000000000000102A /* Products */,
+				G20000000000000000001024 /* TamHoc */,
+				G2000000000000000000102E /* TamHocTests */,
+				G20000000000000000001030 /* TamHocUITests */,
+				GP0000000000000000001031 /* Products */,
 			);
 			sourceTree = "<group>";
 		};
@@ -213,11 +231,11 @@
 /* Begin PBXNativeTarget section */
 		AA0000000000000000000001 /* TamHoc */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = CL0000000000000000001043 /* Build configuration list for PBXNativeTarget "TamHoc" */;
+			buildConfigurationList = CL000000000000000000104A /* Build configuration list for PBXNativeTarget "TamHoc" */;
 			buildPhases = (
-				PH0000000000000000001031 /* Sources */,
-				PH0000000000000000001032 /* Frameworks */,
-				PH0000000000000000001033 /* Resources */,
+				PH0000000000000000001038 /* Sources */,
+				PH0000000000000000001039 /* Frameworks */,
+				PH000000000000000000103A /* Resources */,
 			);
 			buildRules = (
 			);
@@ -225,7 +243,7 @@
 			);
 			name = TamHoc;
 			packageProductDependencies = (
-				PD000000000000000000102D /* StudyCore */,
+				PD0000000000000000001034 /* StudyCore */,
 			);
 			productName = TamHoc;
 			productReference = AA0000000000000000000101 /* TamHoc.app */;
@@ -233,20 +251,20 @@
 		};
 		AA0000000000000000000002 /* TamHocTests */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = CL0000000000000000001046 /* Build configuration list for PBXNativeTarget "TamHocTests" */;
+			buildConfigurationList = CL000000000000000000104D /* Build configuration list for PBXNativeTarget "TamHocTests" */;
 			buildPhases = (
-				PH0000000000000000001034 /* Sources */,
-				PH0000000000000000001035 /* Frameworks */,
-				PH0000000000000000001036 /* Resources */,
+				PH000000000000000000103B /* Sources */,
+				PH000000000000000000103C /* Frameworks */,
+				PH000000000000000000103D /* Resources */,
 			);
 			buildRules = (
 			);
 			dependencies = (
-				TD000000000000000000103B /* PBXTargetDependency */,
+				TD0000000000000000001042 /* PBXTargetDependency */,
 			);
 			name = TamHocTests;
 			packageProductDependencies = (
-				PD000000000000000000102E /* StudyCore */,
+				PD0000000000000000001035 /* StudyCore */,
 			);
 			productName = TamHocTests;
 			productReference = AA0000000000000000000102 /* TamHocTests.xctest */;
@@ -254,16 +272,16 @@
 		};
 		AA0000000000000000000003 /* TamHocUITests */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = CL0000000000000000001049 /* Build configuration list for PBXNativeTarget "TamHocUITests" */;
+			buildConfigurationList = CL0000000000000000001050 /* Build configuration list for PBXNativeTarget "TamHocUITests" */;
 			buildPhases = (
-				PH0000000000000000001037 /* Sources */,
-				PH0000000000000000001038 /* Frameworks */,
-				PH0000000000000000001039 /* Resources */,
+				PH000000000000000000103E /* Sources */,
+				PH000000000000000000103F /* Frameworks */,
+				PH0000000000000000001040 /* Resources */,
 			);
 			buildRules = (
 			);
 			dependencies = (
-				TD000000000000000000103D /* PBXTargetDependency */,
+				TD0000000000000000001044 /* PBXTargetDependency */,
 			);
 			name = TamHocUITests;
 			productName = TamHocUITests;
@@ -293,7 +311,7 @@
 					};
 				};
 			};
-			buildConfigurationList = CL0000000000000000001040 /* Build configuration list for PBXProject "TamHoc" */;
+			buildConfigurationList = CL0000000000000000001047 /* Build configuration list for PBXProject "TamHoc" */;
 			compatibilityVersion = "Xcode 13.0";
 			developmentRegion = vi;
 			hasScannedForEncodings = 0;
@@ -302,11 +320,11 @@
 				Base,
 				vi,
 			);
-			mainGroup = GR000000000000000000102B;
+			mainGroup = GR0000000000000000001032;
 			packageReferences = (
-				PK000000000000000000102C /* XCLocalSwiftPackageReference "Packages/StudyCore" */,
+				PK0000000000000000001033 /* XCLocalSwiftPackageReference "Packages/StudyCore" */,
 			);
-			productRefGroup = GP000000000000000000102A /* Products */;
+			productRefGroup = GP0000000000000000001031 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
@@ -318,24 +336,24 @@
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
-		PH0000000000000000001033 /* Resources */ = {
+		PH000000000000000000103A /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				BF0000000000000000001010,
 				BF0000000000000000001013,
 				BF0000000000000000001016,
+				BF0000000000000000001019,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		PH0000000000000000001036 /* Resources */ = {
+		PH000000000000000000103D /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		PH0000000000000000001039 /* Resources */ = {
+		PH0000000000000000001040 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -345,7 +363,7 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
-		PH0000000000000000001031 /* Sources */ = {
+		PH0000000000000000001038 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -353,23 +371,26 @@
 				BF0000000000000000001007,
 				BF000000000000000000100A,
 				BF000000000000000000100D,
-				BF0000000000000000001019,
-				BF000000000000000000101B,
-				BF000000000000000000101D,
-				BF000000000000000000101F,
+				BF0000000000000000001010,
+				BF000000000000000000101C,
+				BF000000000000000000101E,
+				BF0000000000000000001020,
+				BF0000000000000000001022,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		PH0000000000000000001034 /* Sources */ = {
+		PH000000000000000000103B /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				BF0000000000000000001023,
 				BF0000000000000000001026,
+				BF0000000000000000001028,
+				BF000000000000000000102B,
+				BF000000000000000000102D,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		PH0000000000000000001037 /* Sources */ = {
+		PH000000000000000000103E /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -379,23 +400,23 @@
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
-		TD000000000000000000103B /* PBXTargetDependency */ = {
+		TD0000000000000000001042 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
 			target = AA0000000000000000000001 /* TamHoc */;
-			targetProxy = PX000000000000000000103A /* PBXContainerItemProxy */;
+			targetProxy = PX0000000000000000001041 /* PBXContainerItemProxy */;
 		};
-		TD000000000000000000103D /* PBXTargetDependency */ = {
+		TD0000000000000000001044 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
 			target = AA0000000000000000000001 /* TamHoc */;
-			targetProxy = PX000000000000000000103C /* PBXContainerItemProxy */;
+			targetProxy = PX0000000000000000001043 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
 /* Begin PBXVariantGroup section */
-		VG0000000000000000001012 /* Localizable.strings */ = {
+		VG0000000000000000001015 /* Localizable.strings */ = {
 			isa = PBXVariantGroup;
 			children = (
-				F10000000000000000001011 /* vi */,
+				F10000000000000000001014 /* vi */,
 			);
 			name = "Localizable.strings";
 			sourceTree = "<group>";
@@ -403,7 +424,7 @@
 /* End PBXVariantGroup section */
 
 /* Begin XCBuildConfiguration section */
-		CF000000000000000000103E /* Debug */ = {
+		CF0000000000000000001045 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = F10000000000000000001001 /* Debug.xcconfig */;
 			buildSettings = {
@@ -417,7 +438,7 @@
 			};
 			name = Debug;
 		};
-		CF000000000000000000103F /* Release */ = {
+		CF0000000000000000001046 /* Release */ = {
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = F10000000000000000001002 /* Release.xcconfig */;
 			buildSettings = {
@@ -431,7 +452,7 @@
 			};
 			name = Release;
 		};
-		CF0000000000000000001041 /* Debug */ = {
+		CF0000000000000000001048 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
@@ -445,7 +466,7 @@
 			};
 			name = Debug;
 		};
-		CF0000000000000000001042 /* Release */ = {
+		CF0000000000000000001049 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
@@ -459,7 +480,7 @@
 			};
 			name = Release;
 		};
-		CF0000000000000000001044 /* Debug */ = {
+		CF000000000000000000104B /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
@@ -477,7 +498,7 @@
 			};
 			name = Debug;
 		};
-		CF0000000000000000001045 /* Release */ = {
+		CF000000000000000000104C /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
@@ -495,7 +516,7 @@
 			};
 			name = Release;
 		};
-		CF0000000000000000001047 /* Debug */ = {
+		CF000000000000000000104E /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				INFOPLIST_FILE = TamHocUITests/Info.plist;
@@ -512,7 +533,7 @@
 			};
 			name = Debug;
 		};
-		CF0000000000000000001048 /* Release */ = {
+		CF000000000000000000104F /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				INFOPLIST_FILE = TamHocUITests/Info.plist;
@@ -532,38 +553,38 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		CL0000000000000000001040 /* Build configuration list for PBXProject "TamHoc" */ = {
+		CL0000000000000000001047 /* Build configuration list for PBXProject "TamHoc" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				CF000000000000000000103E /* Debug */,
-				CF000000000000000000103F /* Release */,
+				CF0000000000000000001045 /* Debug */,
+				CF0000000000000000001046 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		CL0000000000000000001043 /* Build configuration list for PBXNativeTarget "TamHoc" */ = {
+		CL000000000000000000104A /* Build configuration list for PBXNativeTarget "TamHoc" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				CF0000000000000000001041 /* Debug */,
-				CF0000000000000000001042 /* Release */,
+				CF0000000000000000001048 /* Debug */,
+				CF0000000000000000001049 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		CL0000000000000000001046 /* Build configuration list for PBXNativeTarget "TamHocTests" */ = {
+		CL000000000000000000104D /* Build configuration list for PBXNativeTarget "TamHocTests" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				CF0000000000000000001044 /* Debug */,
-				CF0000000000000000001045 /* Release */,
+				CF000000000000000000104B /* Debug */,
+				CF000000000000000000104C /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		CL0000000000000000001049 /* Build configuration list for PBXNativeTarget "TamHocUITests" */ = {
+		CL0000000000000000001050 /* Build configuration list for PBXNativeTarget "TamHocUITests" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				CF0000000000000000001047 /* Debug */,
-				CF0000000000000000001048 /* Release */,
+				CF000000000000000000104E /* Debug */,
+				CF000000000000000000104F /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
@@ -571,21 +592,21 @@
 /* End XCConfigurationList section */
 
 /* Begin XCLocalSwiftPackageReference section */
-		PK000000000000000000102C /* XCLocalSwiftPackageReference "Packages/StudyCore" */ = {
+		PK0000000000000000001033 /* XCLocalSwiftPackageReference "Packages/StudyCore" */ = {
 			isa = XCLocalSwiftPackageReference;
 			relativePath = Packages/StudyCore;
 		};
 /* End XCLocalSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
-		PD000000000000000000102D /* StudyCore */ = {
+		PD0000000000000000001034 /* StudyCore */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = PK000000000000000000102C /* XCLocalSwiftPackageReference "Packages/StudyCore" */;
+			package = PK0000000000000000001033 /* XCLocalSwiftPackageReference "Packages/StudyCore" */;
 			productName = StudyCore;
 		};
-		PD000000000000000000102E /* StudyCore */ = {
+		PD0000000000000000001035 /* StudyCore */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = PK000000000000000000102C /* XCLocalSwiftPackageReference "Packages/StudyCore" */;
+			package = PK0000000000000000001033 /* XCLocalSwiftPackageReference "Packages/StudyCore" */;
 			productName = StudyCore;
 		};
 /* End XCSwiftPackageProductDependency section */

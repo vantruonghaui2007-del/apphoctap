@@ -7,26 +7,25 @@ public protocol GuidedAccessMonitoring: AnyObject {
     var changes: AsyncStream<Bool> { get }
 }
 
-private final class NotificationObserverBox: @unchecked Sendable {
+final class NotificationObserverBox: @unchecked Sendable {
     private let center: NotificationCenter
-    private var token: NSObjectProtocol?
+    private var tokens: [NSObjectProtocol] = []
 
-    init(
-        center: NotificationCenter,
-        name: Notification.Name,
-        handler: @escaping @Sendable () -> Void
-    ) {
+    init(center: NotificationCenter, registrations: [(Notification.Name, @Sendable () -> Void)]) {
         self.center = center
-        self.token = center.addObserver(forName: name, object: nil, queue: .main) { _ in
-            handler()
+        for (name, handler) in registrations {
+            let token = center.addObserver(forName: name, object: nil, queue: nil) { _ in
+                handler()
+            }
+            tokens.append(token)
         }
     }
 
     func invalidate() {
-        if let token = token {
+        for token in tokens {
             center.removeObserver(token)
-            self.token = nil
         }
+        tokens.removeAll()
     }
 
     deinit {
@@ -34,12 +33,58 @@ private final class NotificationObserverBox: @unchecked Sendable {
     }
 }
 
+final class StreamBroadcaster<Element: Sendable>: @unchecked Sendable {
+    private let lock = NSLock()
+    private var continuations: [UUID: AsyncStream<Element>.Continuation] = [:]
+
+    func makeStream() -> AsyncStream<Element> {
+        let id = UUID()
+        return AsyncStream { [weak self] continuation in
+            guard let self = self else {
+                continuation.finish()
+                return
+            }
+            self.lock.lock()
+            self.continuations[id] = continuation
+            self.lock.unlock()
+
+            continuation.onTermination = { [weak self] _ in
+                guard let self = self else { return }
+                self.lock.lock()
+                self.continuations.removeValue(forKey: id)
+                self.lock.unlock()
+            }
+        }
+    }
+
+    func yield(_ value: Element) {
+        lock.lock()
+        let active = Array(continuations.values)
+        lock.unlock()
+        for continuation in active {
+            continuation.yield(value)
+        }
+    }
+
+    func finishAll() {
+        lock.lock()
+        let active = Array(continuations.values)
+        continuations.removeAll()
+        lock.unlock()
+        for continuation in active {
+            continuation.finish()
+        }
+    }
+
+    deinit {
+        finishAll()
+    }
+}
+
 @MainActor
 public final class GuidedAccessMonitor: GuidedAccessMonitoring {
     private let statusProvider: () -> Bool
-    private let notificationCenter: NotificationCenter
-    private let notificationName: Notification.Name
-    private var continuations: [UUID: AsyncStream<Bool>.Continuation] = [:]
+    private let broadcaster = StreamBroadcaster<Bool>()
     private var observerBox: NotificationObserverBox?
     private var lastObservedValue: Bool
 
@@ -49,18 +94,18 @@ public final class GuidedAccessMonitor: GuidedAccessMonitoring {
         notificationName: Notification.Name = UIAccessibility.guidedAccessStatusDidChangeNotification
     ) {
         self.statusProvider = statusProvider
-        self.notificationCenter = notificationCenter
-        self.notificationName = notificationName
         self.lastObservedValue = statusProvider()
 
         self.observerBox = NotificationObserverBox(
             center: notificationCenter,
-            name: notificationName
-        ) { [weak self] in
-            Task { @MainActor [weak self] in
-                self?.refreshFromSystem()
-            }
-        }
+            registrations: [
+                (notificationName, { [weak self] in
+                    Task { @MainActor [weak self] in
+                        self?.refreshFromSystem()
+                    }
+                })
+            ]
+        )
     }
 
     public var isEnabled: Bool {
@@ -70,27 +115,14 @@ public final class GuidedAccessMonitor: GuidedAccessMonitoring {
     }
 
     public var changes: AsyncStream<Bool> {
-        let id = UUID()
-        return AsyncStream { [weak self] continuation in
-            guard let self = self else {
-                continuation.finish()
-                return
-            }
-            self.continuations[id] = continuation
-            continuation.onTermination = { [weak self] _ in
-                Task { @MainActor [weak self] in
-                    self?.continuations.removeValue(forKey: id)
-                }
-            }
-        }
+        broadcaster.makeStream()
     }
 
+    /// Reads current system Guided Access status directly; never blindly toggles cached state.
     public func refreshFromSystem() {
         let current = statusProvider()
         guard current != lastObservedValue else { return }
         lastObservedValue = current
-        for continuation in continuations.values {
-            continuation.yield(current)
-        }
+        broadcaster.yield(current)
     }
 }
