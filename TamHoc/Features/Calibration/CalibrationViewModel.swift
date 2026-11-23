@@ -90,27 +90,38 @@ public final class CalibrationViewModel: ObservableObject {
         }
 
         let generation = UUID()
+        let monitor = presenceMonitor
+        let events = monitor.events
         calibrationTask = Task { [weak self] in
-            guard let self = self else { return }
             do {
-                try await self.presenceMonitor.start(calibration: candidateCalibration, generation: generation)
+                try await monitor.start(calibration: candidateCalibration, generation: generation)
             } catch let err as PresenceMonitorError {
+                await monitor.stop()
+                guard !Task.isCancelled else { return }
                 switch err {
                 case .permissionDenied, .permissionRestricted:
-                    self.runState = .failed("Chưa có quyền camera. Bạn có thể cấp quyền trong Cài đặt iOS hoặc chuyển sang chế độ Chỉ đồng hồ.")
+                    self?.runState = .failed("Chưa có quyền camera. Bạn có thể cấp quyền trong Cài đặt iOS hoặc chuyển sang chế độ Chỉ đồng hồ.")
                 case .cameraUnavailable:
-                    self.runState = .failed("Camera trước không khả dụng trên thiết bị này. Hãy dùng chế độ Chỉ đồng hồ.")
+                    self?.runState = .failed("Camera trước không khả dụng trên thiết bị này. Hãy dùng chế độ Chỉ đồng hồ.")
                 }
                 return
             } catch {
-                self.runState = .failed("Không thể khởi động camera hiệu chỉnh.")
+                await monitor.stop()
+                guard !Task.isCancelled else { return }
+                self?.runState = .failed("Không thể khởi động camera hiệu chỉnh.")
                 return
             }
 
-            self.listenerTask = Task { [weak self] in
-                guard let self = self else { return }
-                for await event in self.presenceMonitor.events {
-                    guard event.generation == generation, !Task.isCancelled else { continue }
+            guard !Task.isCancelled, self != nil else {
+                await monitor.stop()
+                return
+            }
+
+            self?.listenerTask = Task { [weak self] in
+                for await event in events {
+                    guard !Task.isCancelled else { break }
+                    guard let self = self else { break }
+                    guard event.generation == generation else { continue }
                     self.livePresence = event.sample.value
                     if let step = self.currentStep {
                         var counts = self.stepCounts[step] ?? (0, 0, 0)
@@ -125,20 +136,20 @@ public final class CalibrationViewModel: ObservableObject {
             }
 
             for step in CalibrationStep.allCases {
-                if Task.isCancelled { break }
-                self.currentStep = step
+                if Task.isCancelled || self == nil { break }
+                self?.currentStep = step
                 for second in stride(from: 5, through: 1, by: -1) {
-                    if Task.isCancelled { break }
-                    self.runState = .running(step: step, secondsLeft: second)
+                    if Task.isCancelled || self == nil { break }
+                    self?.runState = .running(step: step, secondsLeft: second)
                     try? await Task.sleep(nanoseconds: 1_000_000_000)
                 }
             }
 
-            self.currentStep = nil
-            self.listenerTask?.cancel()
-            await self.presenceMonitor.stop()
+            self?.currentStep = nil
+            self?.listenerTask?.cancel()
+            await monitor.stop()
 
-            guard !Task.isCancelled else { return }
+            guard !Task.isCancelled, let self = self else { return }
             await self.evaluateAndPersist(calibration: candidateCalibration)
         }
     }

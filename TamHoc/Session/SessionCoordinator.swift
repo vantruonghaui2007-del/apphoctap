@@ -408,10 +408,11 @@ public final class SessionCoordinator: ObservableObject {
     private func startConsumers(for generation: UUID, mode: PresenceMode) {
         startTickLoop(for: generation)
 
+        let lockChanges = lockMonitor.changes
         lockTask = Task { [weak self] in
-            guard let self = self else { return }
-            for await isLocked in self.lockMonitor.changes {
-                guard !Task.isCancelled, self.activeGeneration == generation else { break }
+            for await isLocked in lockChanges {
+                guard !Task.isCancelled else { break }
+                guard let self = self, self.activeGeneration == generation else { break }
                 if !isLocked {
                     self.handleEngineInput(.lockChanged(false))
                     break

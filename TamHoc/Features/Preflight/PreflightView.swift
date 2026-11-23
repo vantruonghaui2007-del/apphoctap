@@ -77,7 +77,11 @@ public struct PreflightView: View {
         .navigationTitle("Chuẩn bị khóa")
         .navigationBarTitleDisplayMode(.inline)
         .onAppear {
+            viewModel.startObserving()
             viewModel.refreshChecks()
+        }
+        .onDisappear {
+            viewModel.stopObserving()
         }
         .sheet(isPresented: $showingHelpSheet) {
             GuidedAccessInstructionsSheet()
@@ -238,3 +242,4 @@ private struct RowIDModifier: ViewModifier {
         }
     }
 }
+

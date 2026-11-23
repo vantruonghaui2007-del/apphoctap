@@ -52,6 +52,10 @@ final class FakeGuidedAccessMonitor: GuidedAccessMonitoring {
         broadcaster.makeStream()
     }
 
+    var subscriberCount: Int {
+        broadcaster.subscriberCount
+    }
+
     func send(_ enabled: Bool) {
         isEnabled = enabled
         broadcaster.yield(enabled)

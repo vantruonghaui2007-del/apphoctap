@@ -32,17 +32,28 @@ public final class SessionViewModel: ObservableObject {
         coordinator.$lastErrorMessage
             .assign(to: &$errorMessage)
 
+        startObserving()
+    }
+
+    deinit {
+        lockTask?.cancel()
+    }
+
+    public func startObserving() {
+        guard lockTask == nil else { return }
+        let changes = lockMonitor.changes
         lockTask = Task { [weak self] in
-            guard let self = self else { return }
-            for await enabled in self.lockMonitor.changes {
+            for await enabled in changes {
                 guard !Task.isCancelled else { break }
+                guard let self = self else { break }
                 self.isGuidedAccessEnabled = enabled
             }
         }
     }
 
-    deinit {
+    public func stopObserving() {
         lockTask?.cancel()
+        lockTask = nil
     }
 
     public func refreshLockStatus() {
@@ -83,3 +94,4 @@ public final class SessionViewModel: ObservableObject {
         coordinator.clearCompletedSummary()
     }
 }
+

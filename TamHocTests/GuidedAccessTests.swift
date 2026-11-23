@@ -143,6 +143,98 @@ final class GuidedAccessTests: XCTestCase {
         XCTAssertFalse(json.contains("youtube"))
         XCTAssertFalse(json.contains("instagram"))
     }
+
+    func testPreflightViewModelDeallocatesAndUnsubscribesWithoutRetainCycle() async {
+        let lock = FakeGuidedAccessMonitor(isEnabled: true)
+        var vm: PreflightViewModel? = PreflightViewModel(
+            plannedSeconds: 300,
+            presenceMode: .timerOnly,
+            warningsEnabled: true,
+            calibration: nil,
+            lockMonitor: lock,
+            cameraAuthorizer: FakeCameraAuthorizer()
+        )
+        weak var weakVM = vm
+
+        // Wait for subscription task to start listening
+        for _ in 0..<40 where lock.subscriberCount == 0 {
+            try? await Task.sleep(nanoseconds: 5_000_000)
+        }
+        XCTAssertEqual(lock.subscriberCount, 1)
+
+        // Deliver a live event through the active stream
+        lock.send(false)
+        for _ in 0..<40 where vm?.isGuidedAccessEnabled == true {
+            try? await Task.sleep(nanoseconds: 5_000_000)
+        }
+        XCTAssertEqual(vm?.isGuidedAccessEnabled, false)
+
+        // Drop external reference without manually calling stopObserving()
+        vm = nil
+        XCTAssertNil(weakVM, "PreflightViewModel must not be retained by its lock observation task")
+
+        for _ in 0..<40 where lock.subscriberCount > 0 {
+            try? await Task.sleep(nanoseconds: 5_000_000)
+        }
+        XCTAssertEqual(lock.subscriberCount, 0)
+    }
+
+    func testPreflightViewModelStopObservingRemovesSubscriberOnDisappear() async {
+        let lock = FakeGuidedAccessMonitor(isEnabled: true)
+        let vm = PreflightViewModel(
+            plannedSeconds: 300,
+            presenceMode: .timerOnly,
+            warningsEnabled: true,
+            calibration: nil,
+            lockMonitor: lock,
+            cameraAuthorizer: FakeCameraAuthorizer()
+        )
+
+        for _ in 0..<40 where lock.subscriberCount == 0 {
+            try? await Task.sleep(nanoseconds: 5_000_000)
+        }
+        XCTAssertEqual(lock.subscriberCount, 1)
+
+        vm.stopObserving()
+        for _ in 0..<40 where lock.subscriberCount > 0 {
+            try? await Task.sleep(nanoseconds: 5_000_000)
+        }
+        XCTAssertEqual(lock.subscriberCount, 0)
+    }
+
+    func testSessionViewModelDeallocatesWithoutRetainCycle() async {
+        let lock = FakeGuidedAccessMonitor(isEnabled: true)
+        let coordinator = SessionCoordinator(
+            clock: FakeClock(),
+            lockMonitor: lock,
+            presenceMonitor: FakePresenceMonitor(),
+            repository: MockSessionRepository(),
+            warningPlayer: SpyWarningPlayer(),
+            idleTimerController: FakeIdleTimerController(),
+            backgroundTaskManager: FakeBackgroundTaskManager()
+        )
+        var vm: SessionViewModel? = SessionViewModel(coordinator: coordinator, lockMonitor: lock)
+        weak var weakVM = vm
+
+        for _ in 0..<40 where lock.subscriberCount == 0 {
+            try? await Task.sleep(nanoseconds: 5_000_000)
+        }
+        XCTAssertEqual(lock.subscriberCount, 1)
+
+        lock.send(false)
+        for _ in 0..<40 where vm?.isGuidedAccessEnabled == true {
+            try? await Task.sleep(nanoseconds: 5_000_000)
+        }
+        XCTAssertEqual(vm?.isGuidedAccessEnabled, false)
+
+        vm = nil
+        XCTAssertNil(weakVM, "SessionViewModel must not be retained by its lock observation task")
+
+        for _ in 0..<40 where lock.subscriberCount > 0 {
+            try? await Task.sleep(nanoseconds: 5_000_000)
+        }
+        XCTAssertEqual(lock.subscriberCount, 0)
+    }
 }
 
 private extension GuidedAccessMonitor {
