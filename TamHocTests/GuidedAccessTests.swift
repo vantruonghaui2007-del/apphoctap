@@ -44,6 +44,50 @@ final class GuidedAccessTests: XCTestCase {
         XCTAssertFalse(monitor.isEnabled)
     }
 
+    func testReadingIsEnabledBeforeNotificationDoesNotDropChangeEvent() async throws {
+        var systemValue = true
+        let center = NotificationCenter()
+        let noteName = Notification.Name("TestGuidedAccessReadRace")
+        let monitor = GuidedAccessMonitor(
+            statusProvider: { systemValue },
+            notificationCenter: center,
+            notificationName: noteName
+        )
+
+        let stream = monitor.changes
+        let receivedTask = Task<Bool?, Never> {
+            for await value in stream {
+                return value
+            }
+            return nil
+        }
+
+        // Wait until subscription is active
+        for _ in 0..<20 where monitor.subscriberCountForTesting == 0 {
+            try? await Task.sleep(nanoseconds: 5_000_000)
+        }
+        XCTAssertEqual(monitor.subscriberCountForTesting, 1)
+
+        // Flip system status and read isEnabled BEFORE notification runs
+        systemValue = false
+        XCTAssertFalse(monitor.isEnabled)
+
+        center.post(name: noteName, object: nil)
+
+        // Bounded wait so regression cannot hang test suite
+        let result = await withTaskGroup(of: Bool?.self) { group in
+            group.addTask { await receivedTask.value }
+            group.addTask {
+                try? await Task.sleep(nanoseconds: 1_000_000_000)
+                return nil
+            }
+            let first = await group.next() ?? nil
+            group.cancelAll()
+            return first
+        }
+        XCTAssertEqual(result, false)
+    }
+
     func testDuplicateLifecycleEventsAreCoalesced() async {
         let center = NotificationCenter()
         let monitor = AppActivityMonitor(
@@ -111,3 +155,4 @@ private extension GuidedAccessMonitor {
         )
     }
 }
+

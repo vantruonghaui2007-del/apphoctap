@@ -76,6 +76,12 @@ final class StreamBroadcaster<Element: Sendable>: @unchecked Sendable {
         }
     }
 
+    var subscriberCount: Int {
+        lock.lock()
+        defer { lock.unlock() }
+        return continuations.count
+    }
+
     deinit {
         finishAll()
     }
@@ -86,7 +92,11 @@ public final class GuidedAccessMonitor: GuidedAccessMonitoring {
     private let statusProvider: () -> Bool
     private let broadcaster = StreamBroadcaster<Bool>()
     private var observerBox: NotificationObserverBox?
-    private var lastObservedValue: Bool
+    private var lastPublishedValue: Bool
+
+    var subscriberCountForTesting: Int {
+        broadcaster.subscriberCount
+    }
 
     public init(
         statusProvider: @escaping () -> Bool = { UIAccessibility.isGuidedAccessEnabled },
@@ -94,7 +104,7 @@ public final class GuidedAccessMonitor: GuidedAccessMonitoring {
         notificationName: Notification.Name = UIAccessibility.guidedAccessStatusDidChangeNotification
     ) {
         self.statusProvider = statusProvider
-        self.lastObservedValue = statusProvider()
+        self.lastPublishedValue = statusProvider()
 
         self.observerBox = NotificationObserverBox(
             center: notificationCenter,
@@ -108,10 +118,9 @@ public final class GuidedAccessMonitor: GuidedAccessMonitoring {
         )
     }
 
+    /// Pure status read; never mutates `lastPublishedValue` so pending change events cannot be suppressed.
     public var isEnabled: Bool {
-        let current = statusProvider()
-        lastObservedValue = current
-        return current
+        statusProvider()
     }
 
     public var changes: AsyncStream<Bool> {
@@ -121,8 +130,8 @@ public final class GuidedAccessMonitor: GuidedAccessMonitoring {
     /// Reads current system Guided Access status directly; never blindly toggles cached state.
     public func refreshFromSystem() {
         let current = statusProvider()
-        guard current != lastObservedValue else { return }
-        lastObservedValue = current
+        guard current != lastPublishedValue else { return }
+        lastPublishedValue = current
         broadcaster.yield(current)
     }
 }
