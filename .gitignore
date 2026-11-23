@@ -1,0 +1,25 @@
+# Xcode & Swift
+DerivedData/
+build/
+.build/
+.swiftpm/
+*.xcuserstate
+xcuserdata/
+*.xcresult
+artifacts/
+
+# Signing, secrets, certificates, provisioning
+*.p12
+*.p8
+*.cer
+*.mobileprovision
+*.provisionprofile
+*.ipa
+ExportOptions.plist
+!Config/ExportOptions.template.plist
+
+# OS & temporary files
+.DS_Store
+Thumbs.db
+*.swp
+*.tmp

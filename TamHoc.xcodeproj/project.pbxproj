@@ -1,0 +1,553 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 54;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		BF0000000000000000001005 /* AppEnvironment.swift in Sources */ = {isa = PBXBuildFile; fileRef = F10000000000000000001004; };
+		BF0000000000000000001007 /* TamHocApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = F10000000000000000001006; };
+		BF000000000000000000100A /* GuidedAccessMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = F10000000000000000001009; };
+		BF000000000000000000100D /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = F1000000000000000000100C; };
+		BF0000000000000000001010 /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = VG000000000000000000100F; };
+		BF0000000000000000001013 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = F10000000000000000001012; };
+		BF0000000000000000001017 /* AvailabilityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F10000000000000000001016; };
+		BF0000000000000000001021 /* StudyCore in Frameworks */ = {isa = PBXBuildFile; productRef = PD000000000000000000101F; };
+		BF0000000000000000001022 /* StudyCore in Frameworks */ = {isa = PBXBuildFile; productRef = PD0000000000000000001020; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		PX000000000000000000102C /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = AA0000000000000000000010 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = AA0000000000000000000001;
+			remoteInfo = TamHoc;
+		};
+		PX000000000000000000102E /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = AA0000000000000000000010 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = AA0000000000000000000001;
+			remoteInfo = TamHoc;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXFileReference section */
+		AA0000000000000000000101 /* TamHoc.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = TamHoc.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		AA0000000000000000000102 /* TamHocTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = TamHocTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		AA0000000000000000000103 /* TamHocUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = TamHocUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		F10000000000000000001001 /* Debug.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; name = "Debug.xcconfig"; path = "Debug.xcconfig"; sourceTree = "<group>"; };
+		F10000000000000000001002 /* Release.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; name = "Release.xcconfig"; path = "Release.xcconfig"; sourceTree = "<group>"; };
+		F10000000000000000001004 /* AppEnvironment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "AppEnvironment.swift"; path = "AppEnvironment.swift"; sourceTree = "<group>"; };
+		F10000000000000000001006 /* TamHocApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "TamHocApp.swift"; path = "TamHocApp.swift"; sourceTree = "<group>"; };
+		F10000000000000000001009 /* GuidedAccessMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "GuidedAccessMonitor.swift"; path = "GuidedAccessMonitor.swift"; sourceTree = "<group>"; };
+		F1000000000000000000100C /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; name = "Assets.xcassets"; path = "Assets.xcassets"; sourceTree = "<group>"; };
+		F1000000000000000000100E /* vi */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = "vi"; path = "vi.lproj/Localizable.strings"; sourceTree = "<group>"; };
+		F10000000000000000001011 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; name = "Info.plist"; path = "Info.plist"; sourceTree = "<group>"; };
+		F10000000000000000001012 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; name = "PrivacyInfo.xcprivacy"; path = "PrivacyInfo.xcprivacy"; sourceTree = "<group>"; };
+		F10000000000000000001016 /* AvailabilityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "AvailabilityTests.swift"; path = "AvailabilityTests.swift"; sourceTree = "<group>"; };
+		F10000000000000000001018 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; name = "Info.plist"; path = "Info.plist"; sourceTree = "<group>"; };
+		F1000000000000000000101A /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; name = "Info.plist"; path = "Info.plist"; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		PH0000000000000000001024 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				BF0000000000000000001021 /* StudyCore in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		PH0000000000000000001027 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				BF0000000000000000001022 /* StudyCore in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		PH000000000000000000102A /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		G10000000000000000001003 /* Config */ = {
+			isa = PBXGroup;
+			children = (
+				F10000000000000000001001 /* Debug.xcconfig */,
+				F10000000000000000001002 /* Release.xcconfig */,
+			);
+			name = "Config";
+			path = "Config";
+			sourceTree = "<group>";
+		};
+		G20000000000000000001008 /* App */ = {
+			isa = PBXGroup;
+			children = (
+				F10000000000000000001004 /* AppEnvironment.swift */,
+				F10000000000000000001006 /* TamHocApp.swift */,
+			);
+			name = "App";
+			path = "App";
+			sourceTree = "<group>";
+		};
+		G2000000000000000000100B /* Lock */ = {
+			isa = PBXGroup;
+			children = (
+				F10000000000000000001009 /* GuidedAccessMonitor.swift */,
+			);
+			name = "Lock";
+			path = "Lock";
+			sourceTree = "<group>";
+		};
+		G20000000000000000001014 /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				F1000000000000000000100C /* Assets.xcassets */,
+				VG000000000000000000100F /* Localizable.strings */,
+				F10000000000000000001011 /* Info.plist */,
+				F10000000000000000001012 /* PrivacyInfo.xcprivacy */,
+			);
+			name = "Resources";
+			path = "Resources";
+			sourceTree = "<group>";
+		};
+		G20000000000000000001015 /* TamHoc */ = {
+			isa = PBXGroup;
+			children = (
+				G20000000000000000001008 /* App */,
+				G2000000000000000000100B /* Lock */,
+				G20000000000000000001014 /* Resources */,
+			);
+			name = "TamHoc";
+			path = "TamHoc";
+			sourceTree = "<group>";
+		};
+		G20000000000000000001019 /* TamHocTests */ = {
+			isa = PBXGroup;
+			children = (
+				F10000000000000000001016 /* AvailabilityTests.swift */,
+				F10000000000000000001018 /* Info.plist */,
+			);
+			name = "TamHocTests";
+			path = "TamHocTests";
+			sourceTree = "<group>";
+		};
+		G2000000000000000000101B /* TamHocUITests */ = {
+			isa = PBXGroup;
+			children = (
+				F1000000000000000000101A /* Info.plist */,
+			);
+			name = "TamHocUITests";
+			path = "TamHocUITests";
+			sourceTree = "<group>";
+		};
+		GP000000000000000000101C /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				AA0000000000000000000101 /* TamHoc.app */,
+				AA0000000000000000000102 /* TamHocTests.xctest */,
+				AA0000000000000000000103 /* TamHocUITests.xctest */,
+			);
+			name = "Products";
+			sourceTree = "<group>";
+		};
+		GR000000000000000000101D /* Root */ = {
+			isa = PBXGroup;
+			children = (
+				G10000000000000000001003 /* Config */,
+				G20000000000000000001015 /* TamHoc */,
+				G20000000000000000001019 /* TamHocTests */,
+				G2000000000000000000101B /* TamHocUITests */,
+				GP000000000000000000101C /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		AA0000000000000000000001 /* TamHoc */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = CL0000000000000000001035 /* Build configuration list for PBXNativeTarget "TamHoc" */;
+			buildPhases = (
+				PH0000000000000000001023 /* Sources */,
+				PH0000000000000000001024 /* Frameworks */,
+				PH0000000000000000001025 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = TamHoc;
+			packageProductDependencies = (
+				PD000000000000000000101F /* StudyCore */,
+			);
+			productName = TamHoc;
+			productReference = AA0000000000000000000101 /* TamHoc.app */;
+			productType = "com.apple.product-type.application";
+		};
+		AA0000000000000000000002 /* TamHocTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = CL0000000000000000001038 /* Build configuration list for PBXNativeTarget "TamHocTests" */;
+			buildPhases = (
+				PH0000000000000000001026 /* Sources */,
+				PH0000000000000000001027 /* Frameworks */,
+				PH0000000000000000001028 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				TD000000000000000000102D /* PBXTargetDependency */,
+			);
+			name = TamHocTests;
+			packageProductDependencies = (
+				PD0000000000000000001020 /* StudyCore */,
+			);
+			productName = TamHocTests;
+			productReference = AA0000000000000000000102 /* TamHocTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+		AA0000000000000000000003 /* TamHocUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = CL000000000000000000103B /* Build configuration list for PBXNativeTarget "TamHocUITests" */;
+			buildPhases = (
+				PH0000000000000000001029 /* Sources */,
+				PH000000000000000000102A /* Frameworks */,
+				PH000000000000000000102B /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				TD000000000000000000102F /* PBXTargetDependency */,
+			);
+			name = TamHocUITests;
+			productName = TamHocUITests;
+			productReference = AA0000000000000000000103 /* TamHocUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		AA0000000000000000000010 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 1500;
+				LastUpgradeCheck = 1500;
+				TargetAttributes = {
+					AA0000000000000000000001 = {
+						CreatedOnToolsVersion = 15.0;
+					};
+					AA0000000000000000000002 = {
+						CreatedOnToolsVersion = 15.0;
+						TestTargetID = AA0000000000000000000001;
+					};
+					AA0000000000000000000003 = {
+						CreatedOnToolsVersion = 15.0;
+						TestTargetID = AA0000000000000000000001;
+					};
+				};
+			};
+			buildConfigurationList = CL0000000000000000001032 /* Build configuration list for PBXProject "TamHoc" */;
+			compatibilityVersion = "Xcode 13.0";
+			developmentRegion = vi;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+				vi,
+			);
+			mainGroup = GR000000000000000000101D;
+			packageReferences = (
+				PK000000000000000000101E /* XCLocalSwiftPackageReference "Packages/StudyCore" */,
+			);
+			productRefGroup = GP000000000000000000101C /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				AA0000000000000000000001 /* TamHoc */,
+				AA0000000000000000000002 /* TamHocTests */,
+				AA0000000000000000000003 /* TamHocUITests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		PH0000000000000000001025 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				BF000000000000000000100D,
+				BF0000000000000000001010,
+				BF0000000000000000001013,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		PH0000000000000000001028 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		PH000000000000000000102B /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		PH0000000000000000001023 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				BF0000000000000000001005,
+				BF0000000000000000001007,
+				BF000000000000000000100A,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		PH0000000000000000001026 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				BF0000000000000000001017,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		PH0000000000000000001029 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		TD000000000000000000102D /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = AA0000000000000000000001 /* TamHoc */;
+			targetProxy = PX000000000000000000102C /* PBXContainerItemProxy */;
+		};
+		TD000000000000000000102F /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = AA0000000000000000000001 /* TamHoc */;
+			targetProxy = PX000000000000000000102E /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin PBXVariantGroup section */
+		VG000000000000000000100F /* Localizable.strings */ = {
+			isa = PBXVariantGroup;
+			children = (
+				F1000000000000000000100E /* vi */,
+			);
+			name = "Localizable.strings";
+			sourceTree = "<group>";
+		};
+/* End PBXVariantGroup section */
+
+/* Begin XCBuildConfiguration section */
+		CF0000000000000000001030 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = F10000000000000000001001 /* Debug.xcconfig */;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.7;
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		CF0000000000000000001031 /* Release */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = F10000000000000000001002 /* Release.xcconfig */;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.7;
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		CF0000000000000000001033 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				INFOPLIST_FILE = TamHoc/Resources/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_NAME = "$(TARGET_NAME)";
+			};
+			name = Debug;
+		};
+		CF0000000000000000001034 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				INFOPLIST_FILE = TamHoc/Resources/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_NAME = "$(TARGET_NAME)";
+			};
+			name = Release;
+		};
+		CF0000000000000000001036 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				INFOPLIST_FILE = TamHocTests/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.7;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = vn.tamhoc.app.tests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_VERSION = 5.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/TamHoc.app/TamHoc";
+			};
+			name = Debug;
+		};
+		CF0000000000000000001037 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				INFOPLIST_FILE = TamHocTests/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.7;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = vn.tamhoc.app.tests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_VERSION = 5.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/TamHoc.app/TamHoc";
+			};
+			name = Release;
+		};
+		CF0000000000000000001039 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				INFOPLIST_FILE = TamHocUITests/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.7;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = vn.tamhoc.app.uitests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_VERSION = 5.0;
+				TEST_TARGET_NAME = TamHoc;
+			};
+			name = Debug;
+		};
+		CF000000000000000000103A /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				INFOPLIST_FILE = TamHocUITests/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.7;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = vn.tamhoc.app.uitests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_VERSION = 5.0;
+				TEST_TARGET_NAME = TamHoc;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		CL0000000000000000001032 /* Build configuration list for PBXProject "TamHoc" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				CF0000000000000000001030 /* Debug */,
+				CF0000000000000000001031 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		CL0000000000000000001035 /* Build configuration list for PBXNativeTarget "TamHoc" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				CF0000000000000000001033 /* Debug */,
+				CF0000000000000000001034 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		CL0000000000000000001038 /* Build configuration list for PBXNativeTarget "TamHocTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				CF0000000000000000001036 /* Debug */,
+				CF0000000000000000001037 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		CL000000000000000000103B /* Build configuration list for PBXNativeTarget "TamHocUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				CF0000000000000000001039 /* Debug */,
+				CF000000000000000000103A /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		PK000000000000000000101E /* XCLocalSwiftPackageReference "Packages/StudyCore" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = Packages/StudyCore;
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		PD000000000000000000101F /* StudyCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = PK000000000000000000101E /* XCLocalSwiftPackageReference "Packages/StudyCore" */;
+			productName = StudyCore;
+		};
+		PD0000000000000000001020 /* StudyCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = PK000000000000000000101E /* XCLocalSwiftPackageReference "Packages/StudyCore" */;
+			productName = StudyCore;
+		};
+/* End XCSwiftPackageProductDependency section */
+
+	};
+	rootObject = AA0000000000000000000010 /* Project object */;
+}

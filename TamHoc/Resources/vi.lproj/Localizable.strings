@@ -1,0 +1,4 @@
+/* Vietnamese Localization for Tâm Học */
+"app.name" = "Tâm Học";
+"guided_access.status.on" = "Đang bật";
+"guided_access.status.off" = "Chưa bật";
