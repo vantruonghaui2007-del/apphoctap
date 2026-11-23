@@ -6,6 +6,7 @@ final class AppEnvironment: ObservableObject {
     let clock: SessionClock
     let guidedAccessMonitor: GuidedAccessMonitoring
     let activityMonitor: AppActivityMonitor
+    let cameraAuthorizer: CameraAuthorizing
     let presenceMonitor: PresenceMonitoring
     let sessionRepository: SessionRepository
     let settingsRepository: SettingsRepository
@@ -16,6 +17,7 @@ final class AppEnvironment: ObservableObject {
     @Published var settings: AppSettings = .default
     @Published var calibration: Calibration?
     @Published var settingsLoadErrorMessage: String?
+    @Published var didFinishBootstrap = false
 
     static var isUITestHarnessEnabled: Bool {
         #if DEBUG
@@ -28,17 +30,19 @@ final class AppEnvironment: ObservableObject {
     init() {
         #if DEBUG
         if Self.isUITestHarnessEnabled {
-            let args = ProcessInfo.processInfo.arguments
-            let uiTestEnv = Self.makeDebugUITestEnvironment(arguments: args)
+            let uiTestEnv = Self.makeDebugUITestEnvironment(arguments: ProcessInfo.processInfo.arguments)
             self.clock = uiTestEnv.clock
             self.guidedAccessMonitor = uiTestEnv.lockMonitor
             self.activityMonitor = AppActivityMonitor(initialState: .active, observeSystemNotifications: false)
+            self.cameraAuthorizer = uiTestEnv.cameraAuthorizer
             self.presenceMonitor = uiTestEnv.presenceMonitor
             self.sessionRepository = uiTestEnv.sessionRepository
             self.settingsRepository = uiTestEnv.settingsRepository
             self.warningPlayer = uiTestEnv.warningPlayer
             self.coordinator = uiTestEnv.coordinator
             self.sessionViewModel = SessionViewModel(coordinator: uiTestEnv.coordinator, lockMonitor: uiTestEnv.lockMonitor)
+            self.settings = uiTestEnv.initialSettings
+            self.didFinishBootstrap = true
             return
         }
         #endif
@@ -46,7 +50,8 @@ final class AppEnvironment: ObservableObject {
         let clock = SystemSessionClock()
         let lockMonitor = GuidedAccessMonitor()
         let activityMonitor = AppActivityMonitor()
-        let presenceMonitor = CameraPresenceMonitor(clock: clock)
+        let cameraAuthorizer = SystemCameraAuthorizer()
+        let presenceMonitor = CameraPresenceMonitor(clock: clock, authorizer: cameraAuthorizer)
         let sessionRepository = FileSessionRepository(directory: FileSessionRepository.defaultSessionsDirectory())
         let settingsRepository = SettingsRepository(directory: SettingsRepository.defaultDirectory())
         let warningPlayer = WarningPlayer()
@@ -62,6 +67,7 @@ final class AppEnvironment: ObservableObject {
         self.clock = clock
         self.guidedAccessMonitor = lockMonitor
         self.activityMonitor = activityMonitor
+        self.cameraAuthorizer = cameraAuthorizer
         self.presenceMonitor = presenceMonitor
         self.sessionRepository = sessionRepository
         self.settingsRepository = settingsRepository
@@ -75,6 +81,8 @@ final class AppEnvironment: ObservableObject {
     }
 
     func bootstrap() async {
+        guard !didFinishBootstrap else { return }
+
         do {
             self.settings = try await settingsRepository.loadSettings()
         } catch {
@@ -88,6 +96,14 @@ final class AppEnvironment: ObservableObject {
         }
 
         try? await coordinator.recoverUnfinishedSessions()
+        self.didFinishBootstrap = true
+    }
+
+    func markOnboardingSeen() async {
+        var updated = settings
+        updated.onboardingVersionSeen = AppSettings.currentOnboardingVersion
+        settings = updated
+        try? await settingsRepository.saveSettings(updated)
     }
 }
 
@@ -96,11 +112,13 @@ private extension AppEnvironment {
     struct DebugHarness {
         let clock: SessionClock
         let lockMonitor: GuidedAccessMonitoring
+        let cameraAuthorizer: CameraAuthorizing
         let presenceMonitor: PresenceMonitoring
         let sessionRepository: SessionRepository
         let settingsRepository: SettingsRepository
         let warningPlayer: WarningPlayer
         let coordinator: SessionCoordinator
+        let initialSettings: AppSettings
     }
 
     static func makeDebugUITestEnvironment(arguments: [String]) -> DebugHarness {
@@ -128,10 +146,10 @@ private extension AppEnvironment {
         let warningPlayer = WarningPlayer()
 
         let skipOnboarding = !arguments.contains("-uitest-show-onboarding")
+        var initialSettings = AppSettings.default
         if skipOnboarding {
-            var seeded = AppSettings.default
-            seeded.onboardingVersionSeen = AppSettings.currentOnboardingVersion
-            let data = try? RepositoryJSONCoding.makeEncoder().encode(seeded)
+            initialSettings.onboardingVersionSeen = AppSettings.currentOnboardingVersion
+            let data = try? RepositoryJSONCoding.makeEncoder().encode(initialSettings)
             if let data = data {
                 try? data.write(to: testDir.appendingPathComponent("settings.json"))
             }
@@ -148,11 +166,13 @@ private extension AppEnvironment {
         return DebugHarness(
             clock: clock,
             lockMonitor: lockMonitor,
+            cameraAuthorizer: authorizer,
             presenceMonitor: presenceMonitor,
             sessionRepository: sessionRepository,
             settingsRepository: settingsRepository,
             warningPlayer: warningPlayer,
-            coordinator: coordinator
+            coordinator: coordinator,
+            initialSettings: initialSettings
         )
     }
 
