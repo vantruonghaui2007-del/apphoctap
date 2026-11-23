@@ -63,27 +63,62 @@ final class FakePresenceMonitor: PresenceMonitoring {
     private let broadcaster = StreamBroadcaster<PresenceMonitorEvent>()
     var startCount = 0
     var stopCount = 0
+    var isCapturing = false
     var lastStartedGeneration: UUID?
+    var startedGenerations: [UUID] = []
     var startDelayNanoseconds: UInt64 = 0
     var errorOnStart: Error?
+
+    private var shouldSuspendNextStart = false
+    private var suspendedContinuation: CheckedContinuation<Void, Never>?
+    private var suspendedEnteredContinuation: CheckedContinuation<Void, Never>?
 
     var events: AsyncStream<PresenceMonitorEvent> {
         broadcaster.makeStream()
     }
 
+    func suspendNextStart() {
+        shouldSuspendNextStart = true
+    }
+
+    func waitUntilStartSuspended() async {
+        if suspendedContinuation != nil { return }
+        await withCheckedContinuation { continuation in
+            suspendedEnteredContinuation = continuation
+        }
+    }
+
+    func resumeSuspendedStart() {
+        suspendedContinuation?.resume()
+        suspendedContinuation = nil
+    }
+
     func start(calibration: Calibration, generation: UUID) async throws {
         startCount += 1
         lastStartedGeneration = generation
+        startedGenerations.append(generation)
+
+        if shouldSuspendNextStart {
+            shouldSuspendNextStart = false
+            await withCheckedContinuation { continuation in
+                suspendedContinuation = continuation
+                suspendedEnteredContinuation?.resume()
+                suspendedEnteredContinuation = nil
+            }
+        }
+
         if startDelayNanoseconds > 0 {
             try? await Task.sleep(nanoseconds: startDelayNanoseconds)
         }
         if let errorOnStart = errorOnStart {
             throw errorOnStart
         }
+        isCapturing = true
     }
 
     func stop() async {
         stopCount += 1
+        isCapturing = false
     }
 
     func emit(_ sample: PresenceSample, generation: UUID) {

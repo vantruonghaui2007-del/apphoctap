@@ -307,4 +307,129 @@ final class CoordinatorTests: XCTestCase {
         XCTAssertEqual(coordinator.snapshot?.remainingSeconds ?? -1, 60, accuracy: 0.1)
         await coordinator.endEarly()
     }
+
+    func testResumeCameraStartSuspendedThenEndEarlyLeavesCameraStopped() async throws {
+        let clock = FakeClock(monotonicSeconds: 0)
+        let lock = FakeGuidedAccessMonitor(isEnabled: true)
+        let presence = FakePresenceMonitor()
+        let repo = MockSessionRepository()
+        let coordinator = makeCoordinator(clock: clock, lock: lock, presence: presence, repo: repo)
+
+        try await coordinator.start(configuration: try cameraConfig(), calibration: .defaultCentered)
+        let firstToken = try XCTUnwrap(presence.lastStartedGeneration)
+        XCTAssertTrue(presence.isCapturing)
+
+        clock.advance(by: 5)
+        coordinator.receiveActivity(.inactive)
+        try? await Task.sleep(nanoseconds: 25_000_000)
+        XCTAssertFalse(presence.isCapturing)
+
+        // Suspend the resume camera start
+        presence.suspendNextStart()
+        clock.advance(by: 5)
+        coordinator.receiveActivity(.active)
+        await presence.waitUntilStartSuspended()
+
+        // End session early while resume start is still awaiting
+        await coordinator.endEarly()
+
+        // Complete the delayed camera start AFTER session ended
+        presence.resumeSuspendedStart()
+        try? await Task.sleep(nanoseconds: 40_000_000)
+
+        XCTAssertFalse(presence.isCapturing, "Camera must NOT stay running after session ended")
+        XCTAssertEqual(coordinator.lastCompletedRecord?.status, .endedEarly(.userEnded))
+        XCTAssertEqual(presence.startedGenerations.count, 2)
+        XCTAssertNotEqual(firstToken, presence.startedGenerations[1])
+    }
+
+    func testResumeCameraStartSuspendedThenInactiveStopsCameraAndUsesNewRunToken() async throws {
+        let clock = FakeClock(monotonicSeconds: 0)
+        let lock = FakeGuidedAccessMonitor(isEnabled: true)
+        let presence = FakePresenceMonitor()
+        let repo = MockSessionRepository()
+        let coordinator = makeCoordinator(clock: clock, lock: lock, presence: presence, repo: repo)
+
+        try await coordinator.start(configuration: try cameraConfig(seconds: 180), calibration: .defaultCentered)
+        let token1 = try XCTUnwrap(presence.lastStartedGeneration)
+        try? await Task.sleep(nanoseconds: 20_000_000)
+
+        clock.advance(by: 5)
+        coordinator.receiveActivity(.inactive)
+        try? await Task.sleep(nanoseconds: 25_000_000)
+
+        // Suspend resume start, then go inactive again while it's pending
+        presence.suspendNextStart()
+        clock.advance(by: 5)
+        coordinator.receiveActivity(.active)
+        await presence.waitUntilStartSuspended()
+
+        coordinator.receiveActivity(.inactive)
+        presence.resumeSuspendedStart()
+        try? await Task.sleep(nanoseconds: 40_000_000)
+
+        XCTAssertFalse(presence.isCapturing, "Camera must stop when app returned inactive during pending resume")
+
+        // Resume cleanly -> gets a third run token; late frame from token1 must be ignored
+        clock.advance(by: 5)
+        coordinator.receiveActivity(.active)
+        try? await Task.sleep(nanoseconds: 40_000_000)
+        XCTAssertTrue(presence.isCapturing)
+        let token3 = try XCTUnwrap(presence.lastStartedGeneration)
+        XCTAssertNotEqual(token1, token3)
+
+        presence.emit(PresenceSample(sequence: 1, capturedMonotonicSeconds: 15, value: .absent), generation: token1)
+        try? await Task.sleep(nanoseconds: 25_000_000)
+        XCTAssertEqual(coordinator.snapshot?.presence, .unknown(.warmingUp))
+
+        await coordinator.endEarly()
+    }
+
+    func testInactiveDuringPendingStartCancelsStartWithoutFakeRunningOrCamera() async throws {
+        let clock = FakeClock(monotonicSeconds: 0)
+        let lock = FakeGuidedAccessMonitor(isEnabled: true)
+        let presence = FakePresenceMonitor()
+        let repo = MockSessionRepository()
+        let idle = FakeIdleTimerController()
+        let coordinator = makeCoordinator(clock: clock, lock: lock, presence: presence, repo: repo, idle: idle)
+
+        // Case 1: Inactive while camera start is suspended
+        presence.suspendNextStart()
+        let cfg = try cameraConfig()
+        let task1 = Task {
+            try await coordinator.start(configuration: cfg, calibration: .defaultCentered)
+        }
+        await presence.waitUntilStartSuspended()
+        coordinator.receiveActivity(.inactive)
+        presence.resumeSuspendedStart()
+
+        do {
+            try await task1.value
+            XCTFail("Expected startCancelled when app became inactive during camera start")
+        } catch let err as CoordinatorError {
+            XCTAssertEqual(err, .startCancelled)
+        }
+        XCTAssertNil(coordinator.snapshot)
+        XCTAssertFalse(presence.isCapturing)
+        XCTAssertFalse(idle.isAwakeDisabled)
+
+        // Case 2: Return active, then go background while initial save is delayed
+        coordinator.receiveActivity(.active)
+        await repo.setSaveDelay(80_000_000)
+        let timerCfg = try timerConfig()
+        let task2 = Task {
+            try await coordinator.start(configuration: timerCfg, calibration: nil)
+        }
+        try? await Task.sleep(nanoseconds: 20_000_000)
+        coordinator.receiveActivity(.background)
+
+        do {
+            try await task2.value
+            XCTFail("Expected startCancelled when app entered background during initial save")
+        } catch let err as CoordinatorError {
+            XCTAssertEqual(err, .startCancelled)
+        }
+        XCTAssertNil(coordinator.snapshot)
+        XCTAssertFalse(idle.isAwakeDisabled)
+    }
 }

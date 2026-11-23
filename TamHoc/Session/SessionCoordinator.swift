@@ -81,14 +81,17 @@ public final class SessionCoordinator: ObservableObject {
 
     private var engine: SessionEngine?
     private var activeGeneration: UUID?
+    private var activeCaptureToken: UUID?
     private var pendingGeneration: UUID?
     private var activeCalibration: Calibration?
-    private var currentActivity: ActivityState = .active
+    private var currentActivity: ActivityState
     private var isFinalizing = false
 
     private var tickTask: Task<Void, Never>?
     private var lockTask: Task<Void, Never>?
     private var presenceTask: Task<Void, Never>?
+    private var resumeCameraTask: Task<Void, Never>?
+    private var stopCameraTask: Task<Void, Never>?
     private var finalizeTask: Task<Void, Never>?
     private var thermalObserver: NotificationObserverBox?
     private var highestPresenceSequence: UInt64 = 0
@@ -104,7 +107,8 @@ public final class SessionCoordinator: ObservableObject {
         repository: SessionRepository,
         warningPlayer: WarningPlaying,
         idleTimerController: IdleTimerControlling? = nil,
-        backgroundTaskManager: BackgroundTaskManaging? = nil
+        backgroundTaskManager: BackgroundTaskManaging? = nil,
+        initialActivity: ActivityState = .active
     ) {
         self.clock = clock
         self.lockMonitor = lockMonitor
@@ -113,6 +117,7 @@ public final class SessionCoordinator: ObservableObject {
         self.warningPlayer = warningPlayer
         self.idleTimerController = idleTimerController ?? UIApplicationIdleTimerController()
         self.backgroundTaskManager = backgroundTaskManager ?? UIApplicationBackgroundTaskManager()
+        self.currentActivity = initialActivity
     }
 
     public func recoverUnfinishedSessions() async throws {
@@ -133,6 +138,9 @@ public final class SessionCoordinator: ObservableObject {
         guard engine == nil, pendingGeneration == nil else {
             throw CoordinatorError.alreadyRunning
         }
+        guard currentActivity == .active else {
+            throw CoordinatorError.startCancelled
+        }
         guard lockMonitor.isEnabled else {
             throw CoordinatorError.guidedAccessRequired
         }
@@ -143,24 +151,28 @@ public final class SessionCoordinator: ObservableObject {
         }
 
         let generation = UUID()
+        let initialCaptureToken = UUID()
         pendingGeneration = generation
+        activeCaptureToken = (configuration.presenceMode == .cameraVerified) ? initialCaptureToken : nil
         isStarting = true
         lastErrorMessage = nil
         persistenceWarningMessage = nil
 
         if configuration.presenceMode == .cameraVerified, let calibration = calibration {
             do {
-                try await presenceMonitor.start(calibration: calibration, generation: generation)
+                try await presenceMonitor.start(calibration: calibration, generation: initialCaptureToken)
             } catch {
                 if pendingGeneration == generation {
                     pendingGeneration = nil
+                    activeCaptureToken = nil
                     isStarting = false
                 }
                 await presenceMonitor.stop()
                 throw error
             }
 
-            if pendingGeneration != generation || Task.isCancelled {
+            if pendingGeneration != generation || Task.isCancelled || currentActivity != .active {
+                activeCaptureToken = nil
                 await presenceMonitor.stop()
                 if pendingGeneration == generation {
                     pendingGeneration = nil
@@ -170,6 +182,7 @@ public final class SessionCoordinator: ObservableObject {
             }
 
             guard lockMonitor.isEnabled else {
+                activeCaptureToken = nil
                 await presenceMonitor.stop()
                 pendingGeneration = nil
                 isStarting = false
@@ -179,6 +192,7 @@ public final class SessionCoordinator: ObservableObject {
 
         let startTime = clock.now()
         guard startTime.monotonicSeconds.isFinite else {
+            activeCaptureToken = nil
             await presenceMonitor.stop()
             pendingGeneration = nil
             isStarting = false
@@ -194,17 +208,18 @@ public final class SessionCoordinator: ObservableObject {
         do {
             try await saveSerialized(initialEngine.record)
         } catch {
+            activeCaptureToken = nil
             await presenceMonitor.stop()
             pendingGeneration = nil
             isStarting = false
             throw error
         }
 
-        if pendingGeneration != generation || Task.isCancelled {
-            if let cancelledUpdate = try? initialEngine.handle(.finish(.userEnded), at: clock.now()) {
+        if pendingGeneration != generation || Task.isCancelled || currentActivity != .active {
+            if let _ = try? initialEngine.handle(.finish(.userEnded), at: clock.now()) {
                 try? await saveSerialized(initialEngine.record)
-                let _ = cancelledUpdate
             }
+            activeCaptureToken = nil
             await presenceMonitor.stop()
             if pendingGeneration == generation {
                 pendingGeneration = nil
@@ -217,6 +232,7 @@ public final class SessionCoordinator: ObservableObject {
             if let _ = try? initialEngine.handle(.finish(.lockReleased), at: clock.now()) {
                 try? await saveSerialized(initialEngine.record)
             }
+            activeCaptureToken = nil
             await presenceMonitor.stop()
             pendingGeneration = nil
             isStarting = false
@@ -228,9 +244,9 @@ public final class SessionCoordinator: ObservableObject {
         self.activeGeneration = generation
         self.activeConfiguration = configuration
         self.activeCalibration = calibration
-        self.currentActivity = .active
         self.isFinalizing = false
         self.highestPresenceSequence = 0
+        self.resumeCameraTask = nil
         self.finalizeTask = nil
         self.engine = initialEngine
         self.snapshot = initialEngine.snapshot
@@ -246,18 +262,32 @@ public final class SessionCoordinator: ObservableObject {
         guard let gen = activeGeneration, engine != nil else {
             if state != .active {
                 idleTimerController.restore()
+                if pendingGeneration != nil {
+                    pendingGeneration = nil
+                    activeCaptureToken = nil
+                    isStarting = false
+                    Task { [weak self] in
+                        await self?.presenceMonitor.stop()
+                    }
+                }
             }
             return
         }
 
         if state != .active {
+            resumeCameraTask?.cancel()
+            resumeCameraTask = nil
+            activeCaptureToken = nil
             tickTask?.cancel()
             tickTask = nil
             idleTimerController.restore()
             handleEngineInput(.activityChanged(state))
             let bgID = backgroundTaskManager.beginBackgroundTask(name: "TamHocCheckpoint") {}
-            Task { [weak self] in
-                await self?.presenceMonitor.stop()
+            let priorStop = stopCameraTask
+            let monitor = presenceMonitor
+            stopCameraTask = Task { [weak self] in
+                await priorStop?.value
+                await monitor.stop()
                 if let self = self {
                     await self.flushPendingSave()
                     self.backgroundTaskManager.endBackgroundTask(bgID)
@@ -287,17 +317,58 @@ public final class SessionCoordinator: ObservableObject {
 
             if currentEngine.record.configuration.presenceMode == .cameraVerified,
                let calibration = activeCalibration {
-                Task { [weak self] in
-                    guard let self = self,
-                          self.activeGeneration == gen,
-                          self.currentActivity == .active else { return }
+                resumeCameraTask?.cancel()
+                let resumeToken = UUID()
+                activeCaptureToken = resumeToken
+                let priorStop = stopCameraTask
+                let monitor = presenceMonitor
+                let clockRef = clock
+                resumeCameraTask = Task { [weak self] in
+                    await priorStop?.value
+                    let canStart: Bool = {
+                        guard !Task.isCancelled,
+                              let s = self,
+                              s.activeGeneration == gen,
+                              s.activeCaptureToken == resumeToken,
+                              s.currentActivity == .active,
+                              !s.isFinalizing else {
+                            return false
+                        }
+                        return true
+                    }()
+                    guard canStart else { return }
+
                     do {
-                        try await self.presenceMonitor.start(calibration: calibration, generation: gen)
+                        try await monitor.start(calibration: calibration, generation: resumeToken)
+                        let keepRunning: Bool = {
+                            guard !Task.isCancelled,
+                                  let s = self,
+                                  s.activeGeneration == gen,
+                                  s.activeCaptureToken == resumeToken,
+                                  s.currentActivity == .active,
+                                  !s.isFinalizing else {
+                                return false
+                            }
+                            return true
+                        }()
+                        if !keepRunning {
+                            await monitor.stop()
+                        }
+                    } catch is CancellationError {
+                        return
                     } catch {
-                        self.highestPresenceSequence &+= 1
-                        self.handleEngineInput(.sample(PresenceSample(
-                            sequence: self.highestPresenceSequence,
-                            capturedMonotonicSeconds: self.clock.now().monotonicSeconds,
+                        guard !Task.isCancelled,
+                              let s = self,
+                              s.activeGeneration == gen,
+                              s.activeCaptureToken == resumeToken,
+                              s.currentActivity == .active,
+                              !s.isFinalizing else {
+                            return
+                        }
+                        s.highestPresenceSequence &+= 1
+                        s.handleEngineInput(.sample(PresenceSample(
+                            sequence: s.highestPresenceSequence,
+                            capturedMonotonicSeconds: clockRef.now().monotonicSeconds,
                             value: .unknown(.cameraUnavailable)
                         )))
                     }
@@ -309,14 +380,19 @@ public final class SessionCoordinator: ObservableObject {
     public func endEarly() async {
         if pendingGeneration != nil {
             pendingGeneration = nil
+            activeCaptureToken = nil
             isStarting = false
             await presenceMonitor.stop()
             return
         }
 
-        if let engine = engine, activeGeneration != nil {
+        let pendingResume = resumeCameraTask
+        pendingResume?.cancel()
+
+        if let _ = engine, activeGeneration != nil {
             handleEngineInput(.finish(.userEnded))
         }
+        await pendingResume?.value
         await finalizeTask?.value
         await flushPendingSave()
     }
@@ -344,11 +420,14 @@ public final class SessionCoordinator: ObservableObject {
         }
 
         if mode == .cameraVerified {
+            let events = presenceMonitor.events
             presenceTask = Task { [weak self] in
-                guard let self = self else { return }
-                for await event in self.presenceMonitor.events {
-                    guard !Task.isCancelled, self.activeGeneration == generation else { continue }
-                    guard event.generation == generation else { continue }
+                for await event in events {
+                    guard !Task.isCancelled else { break }
+                    guard let self = self,
+                          self.activeGeneration == generation,
+                          let expectedToken = self.activeCaptureToken,
+                          event.generation == expectedToken else { continue }
 
                     if case .unknown(.thermal) = event.sample.value {
                         self.handleEngineInput(.finish(.thermalLimit))
@@ -438,6 +517,12 @@ public final class SessionCoordinator: ObservableObject {
         lockTask = nil
         presenceTask?.cancel()
         presenceTask = nil
+        let pendingStop = stopCameraTask
+        let pendingResume = resumeCameraTask
+        stopCameraTask = nil
+        resumeCameraTask?.cancel()
+        resumeCameraTask = nil
+        activeCaptureToken = nil
         thermalObserver?.invalidate()
         thermalObserver = nil
 
@@ -449,9 +534,12 @@ public final class SessionCoordinator: ObservableObject {
             persistenceWarningMessage = "Không thể lưu tiến độ phiên học. Phiên đã dừng sớm."
         }
 
+        let monitor = presenceMonitor
         finalizeTask = Task { [weak self] in
+            await pendingStop?.value
+            await pendingResume?.value
+            await monitor.stop()
             guard let self = self else { return }
-            await self.presenceMonitor.stop()
             do {
                 try await self.saveSerialized(finalRecord)
             } catch {
@@ -471,6 +559,9 @@ public final class SessionCoordinator: ObservableObject {
         lockTask = nil
         presenceTask?.cancel()
         presenceTask = nil
+        resumeCameraTask?.cancel()
+        resumeCameraTask = nil
+        activeCaptureToken = nil
         thermalObserver?.invalidate()
         thermalObserver = nil
 

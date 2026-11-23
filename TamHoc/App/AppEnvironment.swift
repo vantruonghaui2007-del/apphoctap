@@ -61,7 +61,8 @@ final class AppEnvironment: ObservableObject {
             lockMonitor: lockMonitor,
             presenceMonitor: presenceMonitor,
             repository: sessionRepository,
-            warningPlayer: warningPlayer
+            warningPlayer: warningPlayer,
+            initialActivity: activityMonitor.currentState
         )
 
         self.clock = clock
@@ -161,7 +162,8 @@ private extension AppEnvironment {
             lockMonitor: lockMonitor,
             presenceMonitor: presenceMonitor,
             repository: sessionRepository,
-            warningPlayer: warningPlayer
+            warningPlayer: warningPlayer,
+            initialActivity: activityMonitor.currentState
         )
 
         return DebugHarness(

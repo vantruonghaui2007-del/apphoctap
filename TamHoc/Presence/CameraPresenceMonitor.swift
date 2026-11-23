@@ -76,6 +76,8 @@ final class FrameAnalysisCoordinator: @unchecked Sendable {
     private let emitHandler: @Sendable (PresenceMonitorEvent) -> Void
 
     private var activeGeneration: UUID?
+    private var activeRunToken: UUID?
+    private var pendingRunToken: UUID?
     private var calibration: Calibration?
     private var isInflight = false
     private var lastSampleMonotonic: Double?
@@ -92,8 +94,35 @@ final class FrameAnalysisCoordinator: @unchecked Sendable {
         self.emitHandler = emitHandler
     }
 
+    func prepareRun(token: UUID) {
+        lock.lock()
+        self.pendingRunToken = token
+        lock.unlock()
+    }
+
+    func activateIfPending(
+        generation: UUID,
+        token: UUID,
+        calibration: Calibration,
+        thermalState: ProcessInfo.ThermalState
+    ) -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        guard self.pendingRunToken == token else { return false }
+        self.pendingRunToken = nil
+        self.activeRunToken = token
+        self.activeGeneration = generation
+        self.calibration = calibration
+        self.isInflight = false
+        self.lastSampleMonotonic = nil
+        self.thermalState = thermalState
+        return true
+    }
+
     func activate(generation: UUID, calibration: Calibration, thermalState: ProcessInfo.ThermalState) {
         lock.lock()
+        self.pendingRunToken = nil
+        self.activeRunToken = UUID()
         self.activeGeneration = generation
         self.calibration = calibration
         self.isInflight = false
@@ -105,6 +134,8 @@ final class FrameAnalysisCoordinator: @unchecked Sendable {
 
     func deactivate() {
         lock.lock()
+        self.pendingRunToken = nil
+        self.activeRunToken = nil
         self.activeGeneration = nil
         self.calibration = nil
         self.isInflight = false
@@ -166,7 +197,7 @@ final class FrameAnalysisCoordinator: @unchecked Sendable {
         guard captureTime.isFinite else { return false }
 
         lock.lock()
-        guard let gen = activeGeneration, let cal = calibration else {
+        guard let gen = activeGeneration, let runToken = activeRunToken, let cal = calibration else {
             lock.unlock()
             return false
         }
@@ -201,7 +232,7 @@ final class FrameAnalysisCoordinator: @unchecked Sendable {
 
         lock.lock()
         isInflight = false
-        let stillActive = (activeGeneration == gen)
+        let stillActive = (activeGeneration == gen && activeRunToken == runToken)
         lock.unlock()
 
         guard stillActive else { return false }
@@ -245,9 +276,11 @@ public final class CameraPresenceMonitor: PresenceMonitoring {
     private let analysisQueue = DispatchQueue(label: "vn.tamhoc.camera.analysis", qos: .userInitiated)
 
     private var captureSession: AVCaptureSession?
+    private var pendingSetupSession: AVCaptureSession?
     private var sampleDelegate: CaptureSampleDelegate?
     private var observerBox: NotificationObserverBox?
     private var activeGeneration: UUID?
+    private var desiredRunToken: UUID?
 
     /// Available only for CalibrationView live preview; never shown during FocusView.
     public var previewCaptureSession: AVCaptureSession? {
@@ -276,27 +309,40 @@ public final class CameraPresenceMonitor: PresenceMonitoring {
     }
 
     public func start(calibration: Calibration, generation: UUID) async throws {
+        let runToken = UUID()
+        desiredRunToken = runToken
+
         // Check authorization and request only when camera mode is actively started
         switch authorizer.authorizationStatus() {
         case .authorized:
             break
         case .notDetermined:
             let granted = await authorizer.requestAccess()
+            guard desiredRunToken == runToken, !Task.isCancelled else {
+                throw CancellationError()
+            }
             guard granted else {
+                desiredRunToken = nil
                 throw PresenceMonitorError.permissionDenied
             }
         case .denied:
+            desiredRunToken = nil
             throw PresenceMonitorError.permissionDenied
         case .restricted:
+            desiredRunToken = nil
             throw PresenceMonitorError.permissionRestricted
         }
 
         guard authorizer.hasFrontCamera() else {
+            desiredRunToken = nil
             throw PresenceMonitorError.cameraUnavailable
         }
 
-        // Tear down any previous session cleanly before starting new generation
-        await stop()
+        // Tear down any previous session cleanly while preserving our new desiredRunToken
+        await teardownSessionOnQueue()
+        guard desiredRunToken == runToken, !Task.isCancelled else {
+            throw CancellationError()
+        }
 
         let thermal = ProcessInfo.processInfo.thermalState
         if thermal == .critical {
@@ -308,29 +354,31 @@ public final class CameraPresenceMonitor: PresenceMonitoring {
 
         let session = AVCaptureSession()
         let delegate = CaptureSampleDelegate(coordinator: frameCoordinator)
+        pendingSetupSession = session
+        frameCoordinator.prepareRun(token: runToken)
 
         let configured = await configureAndStartSession(
             session: session,
             delegate: delegate,
             generation: generation,
+            runToken: runToken,
             calibration: calibration,
             thermal: thermal
         )
-        guard configured else {
-            throw PresenceMonitorError.cameraUnavailable
+
+        if pendingSetupSession === session {
+            pendingSetupSession = nil
         }
 
-        if Task.isCancelled {
-            await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
-                captureQueue.async {
-                    if session.isRunning {
-                        session.stopRunning()
-                    }
-                    continuation.resume()
-                }
-            }
+        guard desiredRunToken == runToken, !Task.isCancelled else {
             frameCoordinator.deactivate()
+            await stopSessionOnQueue(session)
             throw CancellationError()
+        }
+
+        guard configured else {
+            desiredRunToken = nil
+            throw PresenceMonitorError.cameraUnavailable
         }
 
         self.captureSession = session
@@ -340,18 +388,30 @@ public final class CameraPresenceMonitor: PresenceMonitoring {
     }
 
     public func stop() async {
+        desiredRunToken = nil
+        await teardownSessionOnQueue()
+    }
+
+    private func teardownSessionOnQueue() async {
         activeGeneration = nil
         frameCoordinator.deactivate()
         observerBox?.invalidate()
         observerBox = nil
 
-        guard let session = captureSession else {
-            sampleDelegate = nil
-            return
-        }
+        let pending = pendingSetupSession
+        let running = captureSession
         captureSession = nil
         sampleDelegate = nil
 
+        if let pending = pending {
+            await stopSessionOnQueue(pending)
+        }
+        if let running = running, running !== pending {
+            await stopSessionOnQueue(running)
+        }
+    }
+
+    private func stopSessionOnQueue(_ session: AVCaptureSession) async {
         await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
             captureQueue.async {
                 if session.isRunning {
@@ -366,6 +426,7 @@ public final class CameraPresenceMonitor: PresenceMonitoring {
         session: AVCaptureSession,
         delegate: CaptureSampleDelegate,
         generation: UUID,
+        runToken: UUID,
         calibration: Calibration,
         thermal: ProcessInfo.ThermalState
     ) async -> Bool {
@@ -426,11 +487,15 @@ public final class CameraPresenceMonitor: PresenceMonitoring {
                     }
 
                     session.commitConfiguration()
-                    frameCoordinator.activate(
+                    guard frameCoordinator.activateIfPending(
                         generation: generation,
+                        token: runToken,
                         calibration: calibration,
                         thermalState: thermal
-                    )
+                    ) else {
+                        continuation.resume(returning: false)
+                        return
+                    }
                     session.startRunning()
                     continuation.resume(returning: true)
                 } catch {
