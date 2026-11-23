@@ -297,4 +297,55 @@ final class PresenceTests: XCTestCase {
         XCTAssertTrue(coordinator.processFrame(brightFrame))
         XCTAssertEqual(captured.first?.sample.value, .unknown(.detectorFailure))
     }
+
+    func testThermalCriticalEmitsThermalAndBlocksSubsequentFrames() throws {
+        let clock = FakeClock(monotonicSeconds: 0)
+        var emitted: [PresenceMonitorEvent] = []
+        let coordinator = FrameAnalysisCoordinator(clock: clock, detector: VisionPersonDetector()) { event in
+            emitted.append(event)
+        }
+
+        coordinator.activate(generation: UUID(), calibration: .defaultCentered, thermalState: .nominal)
+        coordinator.updateThermalState(.critical)
+
+        XCTAssertEqual(emitted.count, 1)
+        XCTAssertEqual(emitted.first?.sample.value, .unknown(.thermal))
+
+        clock.advance(by: 2.0)
+        let frame = try makeSolidBGRA(brightness: 180)
+        XCTAssertFalse(coordinator.processFrame(frame))
+    }
+
+    func testPlanarVideoRangeLuminanceGate() throws {
+        var buffer: CVPixelBuffer?
+        let status = CVPixelBufferCreate(
+            kCFAllocatorDefault,
+            32,
+            32,
+            kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange,
+            nil,
+            &buffer
+        )
+        XCTAssertEqual(status, kCVReturnSuccess)
+        let pb = try XCTUnwrap(buffer)
+        CVPixelBufferLockBaseAddress(pb, [])
+        if let base = CVPixelBufferGetBaseAddressOfPlane(pb, 0) {
+            let bytesPerRow = CVPixelBufferGetBytesPerRowOfPlane(pb, 0)
+            let height = CVPixelBufferGetHeightOfPlane(pb, 0)
+            let ptr = base.assumingMemoryBound(to: UInt8.self)
+            for y in 0..<height {
+                for x in 0..<bytesPerRow {
+                    ptr[y * bytesPerRow + x] = 16 // video-range black
+                }
+            }
+        }
+        CVPixelBufferUnlockBaseAddress(pb, [])
+
+        let result = try VisionPersonDetector().detect(
+            pixelBuffer: pb,
+            orientation: .up,
+            calibration: .defaultCentered
+        )
+        XCTAssertEqual(result, .unknown(.lowLight))
+    }
 }

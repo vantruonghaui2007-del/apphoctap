@@ -16,6 +16,7 @@
 | Monotonic Clock | `mach_continuous_time()` + `mach_timebase_info` | Không phụ thuộc API iOS 16+ | Khai báo Privacy Manifest `NSPrivacyAccessedAPICategorySystemBootTime` (`35F9.1`) |
 | Vision Person | `VNDetectHumanRectanglesRequest` (`upperBodyOnly = true` iOS 15+) + `VNDetectFaceRectanglesRequest` | Không dùng API Vision iOS 16/17+ | Tương thích iOS 15.7 |
 | Guided Access | `UIAccessibility.isGuidedAccessEnabled` + `guidedAccessStatusDidChangeNotification` | Không gọi `requestGuidedAccessSession` ở bản unmanaged | Đọc thật từ hệ thống |
+| Dynamic Type & Layout | `@Environment(\.dynamicTypeSize)` (`isAccessibilitySize`, iOS 15.0+) + `AdaptiveStack` | Không dùng `ViewThatFits` (iOS 16+) | Đảm bảo nút Trợ giúp/Kết thúc luôn chạm được trên SE tới Pro Max |
 
 ## Trạng thái xác minh thực tế
 - iOS 15.7.x thiết bị thật: **NOT RUN — thiếu thiết bị & macOS/Xcode**.

@@ -350,8 +350,7 @@ public final class SessionCoordinator: ObservableObject {
                     guard !Task.isCancelled, self.activeGeneration == generation else { continue }
                     guard event.generation == generation else { continue }
 
-                    if case .unknown(.thermal) = event.sample.value,
-                       ProcessInfo.processInfo.thermalState == .critical {
+                    if case .unknown(.thermal) = event.sample.value {
                         self.handleEngineInput(.finish(.thermalLimit))
                         break
                     }

@@ -218,4 +218,93 @@ final class CoordinatorTests: XCTestCase {
         XCTAssertEqual(storedRecord?.status, .completed)
         XCTAssertEqual(storedRecord?.revision, coordinator.lastCompletedRecord?.revision)
     }
+
+    func testInjectedThermalCriticalEndsSessionAndStopsCamera() async throws {
+        let clock = FakeClock(monotonicSeconds: 0)
+        let lock = FakeGuidedAccessMonitor(isEnabled: true)
+        let presence = FakePresenceMonitor()
+        let repo = MockSessionRepository()
+        let idle = FakeIdleTimerController()
+        let coordinator = makeCoordinator(clock: clock, lock: lock, presence: presence, repo: repo, idle: idle)
+
+        try await coordinator.start(configuration: try cameraConfig(), calibration: .defaultCentered)
+        let gen = try XCTUnwrap(presence.lastStartedGeneration)
+        try? await Task.sleep(nanoseconds: 20_000_000)
+
+        clock.advance(by: 12)
+        presence.emit(PresenceSample(sequence: 1, capturedMonotonicSeconds: 12, value: .unknown(.thermal)), generation: gen)
+        try? await Task.sleep(nanoseconds: 40_000_000)
+
+        XCTAssertEqual(coordinator.lastCompletedRecord?.status, .endedEarly(.thermalLimit))
+        XCTAssertGreaterThanOrEqual(presence.stopCount, 1)
+        XCTAssertFalse(idle.isAwakeDisabled)
+    }
+
+    func testCameraRevokedOnResumeMarksCameraUnavailableWithoutTrapping() async throws {
+        let clock = FakeClock(monotonicSeconds: 0)
+        let lock = FakeGuidedAccessMonitor(isEnabled: true)
+        let presence = FakePresenceMonitor()
+        let repo = MockSessionRepository()
+        let coordinator = makeCoordinator(clock: clock, lock: lock, presence: presence, repo: repo)
+
+        try await coordinator.start(configuration: try cameraConfig(seconds: 180), calibration: .defaultCentered)
+        clock.advance(by: 10)
+        coordinator.receiveActivity(.inactive)
+        try? await Task.sleep(nanoseconds: 30_000_000)
+
+        // Simulate user revoking camera permission while app was inactive
+        presence.errorOnStart = PresenceMonitorError.permissionDenied
+        clock.advance(by: 15)
+        coordinator.receiveActivity(.active)
+        try? await Task.sleep(nanoseconds: 40_000_000)
+
+        XCTAssertEqual(coordinator.snapshot?.status, .running)
+        XCTAssertEqual(coordinator.snapshot?.presence, .unknown(.cameraUnavailable))
+
+        // Session still ends cleanly when user chooses
+        await coordinator.endEarly()
+        XCTAssertEqual(coordinator.lastCompletedRecord?.status, .endedEarly(.userEnded))
+    }
+
+    func testMidSessionStorageFailureEndsEarlyWithWarning() async throws {
+        enum FakeIOError: Error { case diskFull }
+        let clock = FakeClock(monotonicSeconds: 0)
+        let lock = FakeGuidedAccessMonitor(isEnabled: true)
+        let presence = FakePresenceMonitor()
+        let repo = MockSessionRepository()
+        let coordinator = makeCoordinator(clock: clock, lock: lock, presence: presence, repo: repo)
+
+        try await coordinator.start(configuration: try timerConfig(seconds: 180), calibration: nil)
+        try? await Task.sleep(nanoseconds: 20_000_000)
+
+        await repo.setErrorOnSave(FakeIOError.diskFull)
+        clock.advance(by: 10)
+        coordinator.receiveActivity(.inactive) // triggers checkpoint save which fails
+        try? await Task.sleep(nanoseconds: 60_000_000)
+
+        XCTAssertEqual(coordinator.lastCompletedRecord?.status, .endedEarly(.storageFailure))
+        XCTAssertNotNil(coordinator.persistenceWarningMessage)
+    }
+
+    func testTwentyFourHourWallClockJumpDuringCoordinatorSession() async throws {
+        let clock = FakeClock(monotonicSeconds: 0)
+        let lock = FakeGuidedAccessMonitor(isEnabled: true)
+        let presence = FakePresenceMonitor()
+        let repo = MockSessionRepository()
+        let coordinator = makeCoordinator(clock: clock, lock: lock, presence: presence, repo: repo)
+
+        try await coordinator.start(configuration: try timerConfig(seconds: 120), calibration: nil)
+        try? await Task.sleep(nanoseconds: 20_000_000)
+
+        // Jump wall date -24h and +24h while monotonic advances 30s
+        clock.advance(by: 30, wallOffset: -86_400)
+        coordinator.receiveActivity(.inactive)
+        clock.advance(by: 30, wallOffset: 172_800)
+        coordinator.receiveActivity(.active)
+        try? await Task.sleep(nanoseconds: 30_000_000)
+
+        XCTAssertEqual(coordinator.snapshot?.elapsedSeconds ?? -1, 60, accuracy: 0.1)
+        XCTAssertEqual(coordinator.snapshot?.remainingSeconds ?? -1, 60, accuracy: 0.1)
+        await coordinator.endEarly()
+    }
 }
