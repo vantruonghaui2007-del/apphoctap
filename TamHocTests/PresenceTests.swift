@@ -1,0 +1,300 @@
+import XCTest
+import CoreVideo
+import ImageIO
+import StudyCore
+@testable import TamHoc
+
+final class PresenceTests: XCTestCase {
+    private func makeSolidBGRA(width: Int = 32, height: Int = 32, brightness: UInt8) throws -> CVPixelBuffer {
+        var buffer: CVPixelBuffer?
+        let status = CVPixelBufferCreate(
+            kCFAllocatorDefault,
+            width,
+            height,
+            kCVPixelFormatType_32BGRA,
+            nil,
+            &buffer
+        )
+        XCTAssertEqual(status, kCVReturnSuccess)
+        let pb = try XCTUnwrap(buffer)
+        CVPixelBufferLockBaseAddress(pb, [])
+        defer { CVPixelBufferUnlockBaseAddress(pb, []) }
+        if let base = CVPixelBufferGetBaseAddress(pb) {
+            let bytesPerRow = CVPixelBufferGetBytesPerRow(pb)
+            let ptr = base.assumingMemoryBound(to: UInt8.self)
+            for y in 0..<height {
+                for x in 0..<width {
+                    let idx = y * bytesPerRow + x * 4
+                    ptr[idx] = brightness
+                    ptr[idx + 1] = brightness
+                    ptr[idx + 2] = brightness
+                    ptr[idx + 3] = 255
+                }
+            }
+        }
+        return pb
+    }
+
+    func testROIMirrorAndAspectFillMapping() throws {
+        // 1. Center ROI matches identically regardless of mirror
+        let centerBounds = CGRect(x: 0, y: 0, width: 300, height: 600)
+        let imageSize = CGSize(width: 300, height: 600)
+        let centerRect = CGRect(x: 75, y: 150, width: 150, height: 300)
+
+        let unmirroredCenter = try PreviewGeometry.visionROI(
+            fromPreviewRect: centerRect,
+            previewBounds: centerBounds,
+            imageSize: imageSize,
+            mirrored: false
+        )
+        let mirroredCenter = try PreviewGeometry.visionROI(
+            fromPreviewRect: centerRect,
+            previewBounds: centerBounds,
+            imageSize: imageSize,
+            mirrored: true
+        )
+        XCTAssertEqual(unmirroredCenter.roiX, 0.25, accuracy: 0.001)
+        XCTAssertEqual(unmirroredCenter.roiY, 0.25, accuracy: 0.001)
+        XCTAssertEqual(unmirroredCenter.roiWidth, 0.50, accuracy: 0.001)
+        XCTAssertEqual(unmirroredCenter.roiHeight, 0.50, accuracy: 0.001)
+        XCTAssertEqual(mirroredCenter.roiX, 0.25, accuracy: 0.001)
+
+        // 2. Left preview box flips horizontally when mirrored (front camera)
+        let topLeftRect = CGRect(x: 0, y: 0, width: 100, height: 200)
+        let unmirroredLeft = try PreviewGeometry.visionROI(
+            fromPreviewRect: topLeftRect,
+            previewBounds: centerBounds,
+            imageSize: imageSize,
+            mirrored: false
+        )
+        let mirroredLeft = try PreviewGeometry.visionROI(
+            fromPreviewRect: topLeftRect,
+            previewBounds: centerBounds,
+            imageSize: imageSize,
+            mirrored: true
+        )
+        XCTAssertEqual(unmirroredLeft.roiX, 0.0, accuracy: 0.001)
+        XCTAssertEqual(unmirroredLeft.roiY, 2.0 / 3.0, accuracy: 0.001)
+        XCTAssertEqual(mirroredLeft.roiX, 2.0 / 3.0, accuracy: 0.001)
+        XCTAssertEqual(mirroredLeft.roiY, 2.0 / 3.0, accuracy: 0.001)
+
+        // 3. Aspect-fill vertical crop is accounted for (tall 1:2 image in 1:1 preview)
+        let squareBounds = CGRect(x: 0, y: 0, width: 300, height: 300)
+        let fullSquare = try PreviewGeometry.visionROI(
+            fromPreviewRect: squareBounds,
+            previewBounds: squareBounds,
+            imageSize: CGSize(width: 300, height: 600),
+            mirrored: true
+        )
+        XCTAssertEqual(fullSquare.roiX, 0.0, accuracy: 0.001)
+        XCTAssertEqual(fullSquare.roiWidth, 1.0, accuracy: 0.001)
+        XCTAssertEqual(fullSquare.roiY, 0.25, accuracy: 0.001)
+        XCTAssertEqual(fullSquare.roiHeight, 0.50, accuracy: 0.001)
+
+        // 4. Completely out-of-bounds and NaN rects are rejected
+        XCTAssertThrowsError(
+            try PreviewGeometry.visionROI(
+                fromPreviewRect: CGRect(x: -100, y: 0, width: 50, height: 100),
+                previewBounds: centerBounds,
+                imageSize: imageSize,
+                mirrored: true
+            )
+        )
+        XCTAssertThrowsError(
+            try PreviewGeometry.visionROI(
+                fromPreviewRect: CGRect(x: .nan, y: 0, width: 100, height: 100),
+                previewBounds: centerBounds,
+                imageSize: imageSize,
+                mirrored: true
+            )
+        )
+    }
+
+    func testSampleThrottleAndSingleInflightFrame() throws {
+        let clock = FakeClock(monotonicSeconds: 0)
+        let semaphore = DispatchSemaphore(value: 0)
+        let entered = DispatchSemaphore(value: 0)
+
+        struct BlockingDetector: PersonDetecting {
+            let entered: DispatchSemaphore
+            let release: DispatchSemaphore
+            func detect(pixelBuffer: CVPixelBuffer, orientation: CGImagePropertyOrientation, calibration: Calibration) throws -> PresenceValue {
+                entered.signal()
+                release.wait()
+                return .present
+            }
+        }
+
+        let lock = NSLock()
+        var emitted: [PresenceMonitorEvent] = []
+        let coordinator = FrameAnalysisCoordinator(
+            clock: clock,
+            detector: BlockingDetector(entered: entered, release: semaphore)
+        ) { event in
+            lock.lock()
+            emitted.append(event)
+            lock.unlock()
+        }
+
+        let gen = UUID()
+        coordinator.activate(generation: gen, calibration: .defaultCentered, thermalState: .nominal)
+        let frame = try makeSolidBGRA(brightness: 180)
+
+        // Launch first frame in background so it stays inflight
+        let group = DispatchGroup()
+        group.enter()
+        DispatchQueue.global().async {
+            let accepted = coordinator.processFrame(frame)
+            XCTAssertTrue(accepted)
+            group.leave()
+        }
+        entered.wait()
+
+        // While first frame is inflight, even later timestamp must drop
+        clock.advance(by: 1.0)
+        XCTAssertFalse(coordinator.processFrame(frame))
+
+        semaphore.signal()
+        group.wait()
+
+        // Within 0.5s throttle interval -> dropped
+        clock.advance(by: 0.2)
+        XCTAssertFalse(coordinator.processFrame(frame))
+
+        // Thermal serious throttles to 1 Hz
+        coordinator.updateThermalState(.serious)
+        clock.advance(by: 0.6) // total 0.8s since last -> allowed at 2Hz, dropped at 1Hz
+        XCTAssertFalse(coordinator.processFrame(frame))
+
+        clock.advance(by: 0.5) // >= 1.0s -> accepted
+        let g2 = DispatchGroup()
+        g2.enter()
+        DispatchQueue.global().async {
+            XCTAssertTrue(coordinator.processFrame(frame))
+            g2.leave()
+        }
+        entered.wait()
+        semaphore.signal()
+        g2.wait()
+
+        lock.lock()
+        let count = emitted.count
+        lock.unlock()
+        XCTAssertEqual(count, 2)
+    }
+
+    @MainActor
+    func testPermissionDeniedDoesNotStartCapture() async {
+        let deniedAuth = FakeCameraAuthorizer(status: .denied, frontCameraAvailable: true)
+        let monitor = CameraPresenceMonitor(
+            clock: FakeClock(),
+            authorizer: deniedAuth,
+            detector: VisionPersonDetector()
+        )
+
+        do {
+            try await monitor.start(calibration: .defaultCentered, generation: UUID())
+            XCTFail("Expected permissionDenied")
+        } catch let error as PresenceMonitorError {
+            XCTAssertEqual(error, .permissionDenied)
+        } catch {
+            XCTFail("Unexpected error: \(error)")
+        }
+
+        XCTAssertNil(monitor.previewCaptureSession)
+        XCTAssertEqual(deniedAuth.requestAccessCallCount, 0)
+
+        let restrictedAuth = FakeCameraAuthorizer(status: .restricted, frontCameraAvailable: true)
+        let restrictedMonitor = CameraPresenceMonitor(
+            clock: FakeClock(),
+            authorizer: restrictedAuth,
+            detector: VisionPersonDetector()
+        )
+        do {
+            try await restrictedMonitor.start(calibration: .defaultCentered, generation: UUID())
+            XCTFail("Expected permissionRestricted")
+        } catch let error as PresenceMonitorError {
+            XCTAssertEqual(error, .permissionRestricted)
+        } catch {
+            XCTFail("Unexpected error: \(error)")
+        }
+        XCTAssertNil(restrictedMonitor.previewCaptureSession)
+    }
+
+    func testStoppedGenerationNeverPublishesNewSamples() throws {
+        let clock = FakeClock(monotonicSeconds: 0)
+        let entered = DispatchSemaphore(value: 0)
+        let release = DispatchSemaphore(value: 0)
+
+        struct SlowDetector: PersonDetecting {
+            let entered: DispatchSemaphore
+            let release: DispatchSemaphore
+            func detect(pixelBuffer: CVPixelBuffer, orientation: CGImagePropertyOrientation, calibration: Calibration) throws -> PresenceValue {
+                entered.signal()
+                release.wait()
+                return .present
+            }
+        }
+
+        let lock = NSLock()
+        var emitted: [PresenceMonitorEvent] = []
+        let coordinator = FrameAnalysisCoordinator(
+            clock: clock,
+            detector: SlowDetector(entered: entered, release: release)
+        ) { event in
+            lock.lock()
+            emitted.append(event)
+            lock.unlock()
+        }
+
+        let oldGen = UUID()
+        coordinator.activate(generation: oldGen, calibration: .defaultCentered, thermalState: .nominal)
+        let frame = try makeSolidBGRA(brightness: 200)
+
+        let group = DispatchGroup()
+        group.enter()
+        DispatchQueue.global().async {
+            _ = coordinator.processFrame(frame)
+            group.leave()
+        }
+
+        entered.wait()
+        // Stop / deactivate while detector is still running for oldGen
+        coordinator.deactivate()
+        release.signal()
+        group.wait()
+
+        lock.lock()
+        let count = emitted.count
+        lock.unlock()
+        XCTAssertEqual(count, 0, "Stopped generation must never publish samples after stop")
+    }
+
+    func testLowLightAndDetectorFailureProduceUnknown() throws {
+        let darkFrame = try makeSolidBGRA(brightness: 5) // ~0.02 < 0.08
+        let detector = VisionPersonDetector()
+        let lowLightResult = try detector.detect(
+            pixelBuffer: darkFrame,
+            orientation: .up,
+            calibration: .defaultCentered
+        )
+        XCTAssertEqual(lowLightResult, .unknown(.lowLight))
+
+        struct FailingDetector: PersonDetecting {
+            enum Boom: Error { case fail }
+            func detect(pixelBuffer: CVPixelBuffer, orientation: CGImagePropertyOrientation, calibration: Calibration) throws -> PresenceValue {
+                throw Boom.fail
+            }
+        }
+
+        let clock = FakeClock(monotonicSeconds: 1.0)
+        var captured: [PresenceMonitorEvent] = []
+        let coordinator = FrameAnalysisCoordinator(clock: clock, detector: FailingDetector()) { event in
+            captured.append(event)
+        }
+        coordinator.activate(generation: UUID(), calibration: .defaultCentered, thermalState: .nominal)
+        let brightFrame = try makeSolidBGRA(brightness: 180)
+        XCTAssertTrue(coordinator.processFrame(brightFrame))
+        XCTAssertEqual(captured.first?.sample.value, .unknown(.detectorFailure))
+    }
+}
