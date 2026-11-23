@@ -98,7 +98,7 @@ final class FrameAnalysisCoordinator: @unchecked Sendable {
         self.calibration = calibration
         self.isInflight = false
         self.lastSampleMonotonic = nil
-        self.sequence = 0
+        // Keep sequence strictly monotonic across restarts so PresencePolicy never drops resumed frames
         self.thermalState = thermalState
         lock.unlock()
     }

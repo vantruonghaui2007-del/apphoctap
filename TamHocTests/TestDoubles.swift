@@ -1,4 +1,5 @@
 import Foundation
+import UIKit
 import StudyCore
 @testable import TamHoc
 
@@ -114,4 +115,82 @@ final class FakeCameraAuthorizer: CameraAuthorizing, @unchecked Sendable {
     }
 
     func hasFrontCamera() -> Bool { frontCameraAvailable }
+}
+
+@MainActor
+final class SpyWarningPlayer: WarningPlaying {
+    var playCount = 0
+
+    func playWarning() {
+        playCount += 1
+    }
+}
+
+@MainActor
+final class FakeIdleTimerController: IdleTimerControlling {
+    private(set) var isAwakeDisabled = false
+    private(set) var beginCount = 0
+    private(set) var restoreCount = 0
+
+    func beginKeepingAwake() {
+        beginCount += 1
+        isAwakeDisabled = true
+    }
+
+    func restore() {
+        restoreCount += 1
+        isAwakeDisabled = false
+    }
+}
+
+@MainActor
+final class FakeBackgroundTaskManager: BackgroundTaskManaging {
+    func beginBackgroundTask(name: String, expirationHandler: @escaping @Sendable () -> Void) -> UIBackgroundTaskIdentifier {
+        UIBackgroundTaskIdentifier(rawValue: 1)
+    }
+
+    func endBackgroundTask(_ identifier: UIBackgroundTaskIdentifier) {}
+}
+
+actor MockSessionRepository: SessionRepository {
+    var stored: [UUID: SessionRecord] = [:]
+    var savedSequence: [SessionRecord] = []
+    var saveDelayNanoseconds: UInt64 = 0
+    var failNextNonInitialSave = false
+    var errorOnSave: Error?
+    var errorOnLoad: Error?
+
+    func seed(_ record: SessionRecord) {
+        stored[record.id] = record
+    }
+
+    func setSaveDelay(_ nanos: UInt64) {
+        saveDelayNanoseconds = nanos
+    }
+
+    func setErrorOnSave(_ error: Error?) {
+        errorOnSave = error
+    }
+
+    func loadAll() async throws -> RepositoryReadResult {
+        if let errorOnLoad = errorOnLoad {
+            throw errorOnLoad
+        }
+        return RepositoryReadResult(records: Array(stored.values), quarantinedIDs: [])
+    }
+
+    func save(_ record: SessionRecord) async throws {
+        if saveDelayNanoseconds > 0 {
+            try? await Task.sleep(nanoseconds: saveDelayNanoseconds)
+        }
+        if let errorOnSave = errorOnSave {
+            throw errorOnSave
+        }
+        stored[record.id] = record
+        savedSequence.append(record)
+    }
+
+    func delete(id: UUID) async throws {
+        stored.removeValue(forKey: id)
+    }
 }

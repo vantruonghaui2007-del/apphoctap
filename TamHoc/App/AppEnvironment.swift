@@ -3,7 +3,19 @@ import StudyCore
 
 @MainActor
 final class AppEnvironment: ObservableObject {
+    let clock: SessionClock
     let guidedAccessMonitor: GuidedAccessMonitoring
+    let activityMonitor: AppActivityMonitor
+    let presenceMonitor: PresenceMonitoring
+    let sessionRepository: SessionRepository
+    let settingsRepository: SettingsRepository
+    let warningPlayer: WarningPlayer
+    let coordinator: SessionCoordinator
+    let sessionViewModel: SessionViewModel
+
+    @Published var settings: AppSettings = .default
+    @Published var calibration: Calibration?
+    @Published var settingsLoadErrorMessage: String?
 
     static var isUITestHarnessEnabled: Bool {
         #if DEBUG
@@ -13,11 +25,142 @@ final class AppEnvironment: ObservableObject {
         #endif
     }
 
-    init(guidedAccessMonitor: GuidedAccessMonitoring? = nil) {
-        if let guidedAccessMonitor = guidedAccessMonitor {
-            self.guidedAccessMonitor = guidedAccessMonitor
-        } else {
-            self.guidedAccessMonitor = GuidedAccessMonitor()
+    init() {
+        #if DEBUG
+        if Self.isUITestHarnessEnabled {
+            let args = ProcessInfo.processInfo.arguments
+            let uiTestEnv = Self.makeDebugUITestEnvironment(arguments: args)
+            self.clock = uiTestEnv.clock
+            self.guidedAccessMonitor = uiTestEnv.lockMonitor
+            self.activityMonitor = AppActivityMonitor(initialState: .active, observeSystemNotifications: false)
+            self.presenceMonitor = uiTestEnv.presenceMonitor
+            self.sessionRepository = uiTestEnv.sessionRepository
+            self.settingsRepository = uiTestEnv.settingsRepository
+            self.warningPlayer = uiTestEnv.warningPlayer
+            self.coordinator = uiTestEnv.coordinator
+            self.sessionViewModel = SessionViewModel(coordinator: uiTestEnv.coordinator, lockMonitor: uiTestEnv.lockMonitor)
+            return
+        }
+        #endif
+
+        let clock = SystemSessionClock()
+        let lockMonitor = GuidedAccessMonitor()
+        let activityMonitor = AppActivityMonitor()
+        let presenceMonitor = CameraPresenceMonitor(clock: clock)
+        let sessionRepository = FileSessionRepository(directory: FileSessionRepository.defaultSessionsDirectory())
+        let settingsRepository = SettingsRepository(directory: SettingsRepository.defaultDirectory())
+        let warningPlayer = WarningPlayer()
+
+        let coordinator = SessionCoordinator(
+            clock: clock,
+            lockMonitor: lockMonitor,
+            presenceMonitor: presenceMonitor,
+            repository: sessionRepository,
+            warningPlayer: warningPlayer
+        )
+
+        self.clock = clock
+        self.guidedAccessMonitor = lockMonitor
+        self.activityMonitor = activityMonitor
+        self.presenceMonitor = presenceMonitor
+        self.sessionRepository = sessionRepository
+        self.settingsRepository = settingsRepository
+        self.warningPlayer = warningPlayer
+        self.coordinator = coordinator
+        self.sessionViewModel = SessionViewModel(coordinator: coordinator, lockMonitor: lockMonitor)
+
+        warningPlayer.updateWarningsEnabledProvider { [weak self] in
+            self?.settings.warningsEnabled ?? true
         }
     }
+
+    func bootstrap() async {
+        do {
+            self.settings = try await settingsRepository.loadSettings()
+        } catch {
+            self.settingsLoadErrorMessage = "Không đọc được tệp cài đặt đã lưu; giữ nguyên tệp trên máy."
+        }
+
+        do {
+            self.calibration = try await settingsRepository.loadCalibration()
+        } catch {
+            self.calibration = nil
+        }
+
+        try? await coordinator.recoverUnfinishedSessions()
+    }
 }
+
+#if DEBUG
+private extension AppEnvironment {
+    struct DebugHarness {
+        let clock: SessionClock
+        let lockMonitor: GuidedAccessMonitoring
+        let presenceMonitor: PresenceMonitoring
+        let sessionRepository: SessionRepository
+        let settingsRepository: SettingsRepository
+        let warningPlayer: WarningPlayer
+        let coordinator: SessionCoordinator
+    }
+
+    static func makeDebugUITestEnvironment(arguments: [String]) -> DebugHarness {
+        let testDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("TamHocUITest-\(UUID().uuidString)", isDirectory: true)
+        try? FileManager.default.createDirectory(at: testDir, withIntermediateDirectories: true)
+
+        let lockEnabled = arguments.contains("-uitest-lock-on")
+        let lockMonitor = GuidedAccessMonitor(
+            statusProvider: { lockEnabled },
+            notificationCenter: NotificationCenter(),
+            notificationName: Notification.Name("UITestGuidedAccessUnused")
+        )
+
+        let cameraDenied = arguments.contains("-uitest-camera-denied")
+        let authorizer = UITestCameraAuthorizer(denied: cameraDenied)
+        let clock = SystemSessionClock()
+        let presenceMonitor = CameraPresenceMonitor(
+            clock: clock,
+            authorizer: authorizer,
+            detector: VisionPersonDetector()
+        )
+        let sessionRepository = FileSessionRepository(directory: testDir.appendingPathComponent("Sessions", isDirectory: true))
+        let settingsRepository = SettingsRepository(directory: testDir)
+        let warningPlayer = WarningPlayer()
+
+        let skipOnboarding = !arguments.contains("-uitest-show-onboarding")
+        if skipOnboarding {
+            var seeded = AppSettings.default
+            seeded.onboardingVersionSeen = AppSettings.currentOnboardingVersion
+            let data = try? RepositoryJSONCoding.makeEncoder().encode(seeded)
+            if let data = data {
+                try? data.write(to: testDir.appendingPathComponent("settings.json"))
+            }
+        }
+
+        let coordinator = SessionCoordinator(
+            clock: clock,
+            lockMonitor: lockMonitor,
+            presenceMonitor: presenceMonitor,
+            repository: sessionRepository,
+            warningPlayer: warningPlayer
+        )
+
+        return DebugHarness(
+            clock: clock,
+            lockMonitor: lockMonitor,
+            presenceMonitor: presenceMonitor,
+            sessionRepository: sessionRepository,
+            settingsRepository: settingsRepository,
+            warningPlayer: warningPlayer,
+            coordinator: coordinator
+        )
+    }
+
+    struct UITestCameraAuthorizer: CameraAuthorizing {
+        let denied: Bool
+        func authorizationStatus() -> CameraAuthorizationState { denied ? .denied : .authorized }
+        func requestAccess() async -> Bool { !denied }
+        func hasFrontCamera() -> Bool { !denied }
+    }
+}
+#endif
