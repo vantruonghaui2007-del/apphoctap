@@ -60,13 +60,14 @@ final class GuidedAccessTests: XCTestCase {
             return nil
         }
 
-        return await BoundedAsyncWaiter.waitForTask(
+        let result: Bool?? = await BoundedAsyncWaiter.waitForTask(
             readerTask,
             timeoutNanoseconds: timeoutNanoseconds,
             onTimeout: {
                 readerTask.cancel()
             }
         )
+        return result ?? nil
     }
 
     func testReadingIsEnabledBeforeNotificationDoesNotDropChangeEvent() async throws {
