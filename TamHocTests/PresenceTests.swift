@@ -102,7 +102,7 @@ final class PresenceTests: XCTestCase {
         )
         XCTAssertThrowsError(
             try PreviewGeometry.visionROI(
-                fromPreviewRect: CGRect(x: .nan, y: 0, width: 100, height: 100),
+                fromPreviewRect: CGRect(x: CGFloat.nan, y: 0, width: 100, height: 100),
                 previewBounds: centerBounds,
                 imageSize: imageSize,
                 mirrored: true
