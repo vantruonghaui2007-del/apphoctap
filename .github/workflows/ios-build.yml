@@ -62,7 +62,8 @@ jobs:
           latest = max(v for v, _ in candidates)
           devices = [d for v, d in candidates if v == latest]
           device = next((d for d in devices if d.get("state") == "Booted"), devices[0])
-          udid = str(uuid.UUID(device["udid"]))
+          udid = device["udid"]
+          uuid.UUID(udid)
           print("Using simulator:", device["name"], udid)
           with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as output:
               output.write("TAMHOC_SIMULATOR_ID=" + udid + "\n")
