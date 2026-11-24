@@ -2,23 +2,24 @@
 
 **Ngày cập nhật:** 24/11/2026  
 **Nhánh Git:** `main`  
-**Base code commit trước docs update:** `ef7e959` (`56` tệp `.swift`, SHA-256 snapshot các tệp Swift theo thứ tự đường dẫn tương đối UTF-8 + nội dung: `a69a14798c12575dfc7b78fc13d913cf3c03215307092dccc6142bba8300961f`)  
-**Phạm vi đã triển khai:** Task 1–10 trong [docs/superpowers/plans/2026-11-24-tamhoc-ios.md](superpowers/plans/2026-11-24-tamhoc-ios.md), các bản sửa R1–R6 (Review v1), V2-1..V2-4 (Review v2) và V3-1..V3-2 (Review v3).  
+**Base code commit trước docs update:** `343d32d` (`56` tệp `.swift`, SHA-256 snapshot các tệp Swift theo thứ tự đường dẫn tương đối UTF-8 + nội dung: `37d38c1d80ab060f081d3e2f8138f0dc283b41008af61e5aa75402bf4a0da0bd`)  
+**Phạm vi đã triển khai:** Task 1–10 trong [docs/superpowers/plans/2026-11-24-tamhoc-ios.md](superpowers/plans/2026-11-24-tamhoc-ios.md), các bản sửa R1–R6 (Review v1), V2-1..V2-4 (Review v2), V3-1..V3-2 (Review v3) và V4-1 (Review v4).  
 **Phạm vi ngoài bản đầu:** Task 11 (Managed Single App MDM) và Task 12 (Screen Time iOS 16+) chưa bật/chưa thêm capability.
 
 ---
 
-## 1. Các bản sửa sau Review v3 (`V3-1`, `V3-2`)
-| Mã | Mức độ | Commit | Nội dung đã sửa & Regression Test bổ sung |
+## 1. Bản sửa sau Review v4 (`V4-1`)
+| Mã | Mức độ | Commit | Nội dung đã sửa & Kiểm chứng cần chạy trên Mac |
 |---|---|---|---|
-| **V3-1** | P1 | `e34f60c` | Tách toàn bộ 4 lời gọi `await presence.waitUntilStartSuspended()` ra khỏi synchronous `@autoclosure` của `XCTAssertTrue(...)` trong `TamHocTests/CoordinatorTests.swift`; rà soát bằng parser ngoặc trên toàn bộ 56 tệp `.swift` để xác nhận không còn bất kỳ `XCTAssert*`/`XCTUnwrap` nào chứa `await` bên trong biểu thức đối số. |
-| **V3-2** | P2 | `ef7e959` | Thiết kế lại cơ chế chờ có giới hạn thời gian thực sự (`OnceContinuationGate` + `@MainActor BoundedAsyncWaiter.waitForTask` trong `TamHocTests/TestDoubles.swift`): không đặt `await task.value` làm child của `TaskGroup`, nên khi hết hạn chờ hàm trả `nil` ngay lập tức dù tác vụ nền đang treo ở `CheckedContinuation` không tự hủy theo `Task.cancel()`, đồng thời gọi `onTimeout` cleanup chủ động trên `@MainActor`. Nâng cấp `FakePresenceMonitor` dùng hàng đợi `PendingSuspension` + `abortedSuspensionIDs` đảm bảo mỗi `CheckedContinuation` chỉ được `resume()` tối đa đúng một lần và ném `CancellationError` khi bị dọn dẹp do timeout; đồng bộ `GuidedAccessTests.awaitFirstStreamValue` sang `BoundedAsyncWaiter` trên `@MainActor` để giữ cô lập actor với `AsyncStream` trên cả Swift 5.7/5.8. Thêm regression test `testBoundedWaitTimeoutExitsPromptlyWhenContinuationNeverResumedAndCleansUpOnce` trong `CoordinatorTests.swift`. |
+| **V4-1** | P1 | `343d32d` | Trong `TamHocTests/GuidedAccessTests.swift` (`awaitFirstStreamValue`), `readerTask` có kiểu `Task<Bool?, Never>` nên `BoundedAsyncWaiter.waitForTask<T>` trả `Bool??`. Đã lưu kết quả rõ kiểu `let result: Bool?? = await BoundedAsyncWaiter.waitForTask(...)` và trả `result ?? nil` để xử lý lớp optional bên ngoài về `Bool?` đúng chữ ký hàm: giữ nguyên `false`/`true` khi nhận được sự kiện (không dùng `?? false`), ánh xạ timeout (outer `nil`) và stream đóng trống (inner `nil`) về `nil`, đồng thời giữ nguyên `onTimeout: { readerTask.cancel() }`. Trên Mac cần build target `TamHocTests` và chạy tối thiểu `testReadingIsEnabledBeforeNotificationDoesNotDropChangeEvent` cùng `testStreamWaitTimeoutExitsPromptlyAndCleansUpSubscriberWhenNoNotificationPosted` (hiện **NOT RUN** trên Windows). |
 
 ---
 
-## 2. Lịch sử sửa Review v2 (`V2-1`–`V2-4`) & Review v1 (`R1`–`R6`)
+## 2. Lịch sử sửa Review v3 (`V3-1`–`V3-2`), Review v2 (`V2-1`–`V2-4`) & Review v1 (`R1`–`R6`)
 | Mã | Mức độ | Commit | Tóm tắt |
 |---|---|---|---|
+| **V3-1** | P1 | `e34f60c` | Tách toàn bộ 4 lời gọi `await presence.waitUntilStartSuspended()` ra khỏi synchronous `@autoclosure` của `XCTAssertTrue(...)` trong `TamHocTests/CoordinatorTests.swift`. |
+| **V3-2** | P2 | `ef7e959` | Chuyển cơ chế chờ có timeout sang `OnceContinuationGate` + `@MainActor BoundedAsyncWaiter.waitForTask` độc lập với `TaskGroup`, kèm cleanup chủ động một lần trên `FakePresenceMonitor` (`PendingSuspension` + `abortedSuspensionIDs`) và regression test `testBoundedWaitTimeoutExitsPromptlyWhenContinuationNeverResumedAndCleansUpOnce`. |
 | **V2-1** | P1 | `14cd0e8` | Bỏ chuỗi chờ vòng tròn giữa `endEarly()` và `resumeSuspendedStart()` trong `CoordinatorTests`. |
 | **V2-2** | P1 | `fbd58d2` | Ranh giới đóng phiên `isFinalizing` cho cả 5 lý do kết thúc + cleanup camera theo ownership token `stop(generation:)`. |
 | **V2-3** | P2 | `c3fa0fb` | Kiểm tra `driver.isRunning` và gắn observer `runtimeErrorNotification` theo `object` trước `startRunning()`. |
