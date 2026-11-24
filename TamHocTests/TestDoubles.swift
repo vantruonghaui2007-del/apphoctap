@@ -1,4 +1,5 @@
 import Foundation
+import AVFoundation
 import UIKit
 import StudyCore
 @testable import TamHoc
@@ -182,6 +183,66 @@ final class FakeCameraAuthorizer: CameraAuthorizing, @unchecked Sendable {
     }
 
     func hasFrontCamera() -> Bool { frontCameraAvailable }
+}
+
+final class FakeCaptureSessionDriver: CaptureSessionDriving, @unchecked Sendable {
+    private let lock = NSLock()
+    private var running = false
+    let notificationCenter: NotificationCenter
+    let shouldBecomeRunning: Bool
+    let postRuntimeErrorOnStart: Bool
+    private(set) var configureCallCount = 0
+    private(set) var startCallCount = 0
+    private(set) var stopCallCount = 0
+
+    init(
+        notificationCenter: NotificationCenter,
+        shouldBecomeRunning: Bool = true,
+        postRuntimeErrorOnStart: Bool = false
+    ) {
+        self.notificationCenter = notificationCenter
+        self.shouldBecomeRunning = shouldBecomeRunning
+        self.postRuntimeErrorOnStart = postRuntimeErrorOnStart
+    }
+
+    var rawCaptureSession: AVCaptureSession? { nil }
+    var notificationSender: AnyObject? { self }
+
+    var isRunning: Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return running
+    }
+
+    func configure(
+        delegate: AVCaptureVideoDataOutputSampleBufferDelegate,
+        analysisQueue: DispatchQueue
+    ) throws {
+        lock.lock()
+        configureCallCount += 1
+        lock.unlock()
+    }
+
+    func startRunning() {
+        lock.lock()
+        startCallCount += 1
+        running = shouldBecomeRunning
+        lock.unlock()
+
+        if postRuntimeErrorOnStart {
+            notificationCenter.post(
+                name: AVCaptureSession.runtimeErrorNotification,
+                object: self
+            )
+        }
+    }
+
+    func stopRunning() {
+        lock.lock()
+        stopCallCount += 1
+        running = false
+        lock.unlock()
+    }
 }
 
 @MainActor

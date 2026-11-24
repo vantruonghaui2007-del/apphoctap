@@ -203,8 +203,12 @@ final class FrameAnalysisCoordinator: @unchecked Sendable {
         }
     }
 
-    func emitIssue(_ issue: ObservationIssue) {
+    func emitIssue(_ issue: ObservationIssue, forToken expectedToken: UUID? = nil) {
         lock.lock()
+        if let expectedToken = expectedToken, activeRunToken != expectedToken {
+            lock.unlock()
+            return
+        }
         guard let gen = activeGeneration else {
             lock.unlock()
             return
@@ -307,20 +311,132 @@ private final class CaptureSampleDelegate: NSObject, AVCaptureVideoDataOutputSam
     }
 }
 
+public protocol CaptureSessionDriving: AnyObject, Sendable {
+    var rawCaptureSession: AVCaptureSession? { get }
+    var notificationSender: AnyObject? { get }
+    var isRunning: Bool { get }
+    func configure(
+        delegate: AVCaptureVideoDataOutputSampleBufferDelegate,
+        analysisQueue: DispatchQueue
+    ) throws
+    func startRunning()
+    func stopRunning()
+}
+
+public final class AVCaptureSessionDriver: CaptureSessionDriving, @unchecked Sendable {
+    private let session = AVCaptureSession()
+
+    public init() {}
+
+    public var rawCaptureSession: AVCaptureSession? { session }
+    public var notificationSender: AnyObject? { session }
+    public var isRunning: Bool { session.isRunning }
+
+    public func configure(
+        delegate: AVCaptureVideoDataOutputSampleBufferDelegate,
+        analysisQueue: DispatchQueue
+    ) throws {
+        guard let device = AVCaptureDevice.default(
+            .builtInWideAngleCamera,
+            for: .video,
+            position: .front
+        ) else {
+            throw PresenceMonitorError.cameraUnavailable
+        }
+
+        let input = try AVCaptureDeviceInput(device: device)
+        session.beginConfiguration()
+        defer { session.commitConfiguration() }
+
+        if session.canSetSessionPreset(.vga640x480) {
+            session.sessionPreset = .vga640x480
+        } else if session.canSetSessionPreset(.medium) {
+            session.sessionPreset = .medium
+        }
+
+        guard session.canAddInput(input) else {
+            throw PresenceMonitorError.cameraUnavailable
+        }
+        session.addInput(input)
+
+        let output = AVCaptureVideoDataOutput()
+        output.alwaysDiscardsLateVideoFrames = true
+        output.setSampleBufferDelegate(delegate, queue: analysisQueue)
+
+        guard session.canAddOutput(output) else {
+            throw PresenceMonitorError.cameraUnavailable
+        }
+        session.addOutput(output)
+
+        if output.availableVideoPixelFormatTypes.contains(kCVPixelFormatType_420YpCbCr8BiPlanarFullRange) {
+            output.videoSettings = [
+                kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_420YpCbCr8BiPlanarFullRange
+            ]
+        }
+
+        if let connection = output.connection(with: .video) {
+            if connection.isVideoOrientationSupported {
+                connection.videoOrientation = .portrait
+            }
+            if connection.isVideoMirroringSupported {
+                connection.isVideoMirrored = false
+            }
+        }
+    }
+
+    public func startRunning() {
+        session.startRunning()
+    }
+
+    public func stopRunning() {
+        if session.isRunning {
+            session.stopRunning()
+        }
+    }
+}
+
+private final class StartupErrorTracker: @unchecked Sendable {
+    private let lock = NSLock()
+    private var inStartupPhase = true
+    private var failed = false
+
+    func recordStartupFailure() {
+        lock.lock()
+        if inStartupPhase {
+            failed = true
+        }
+        lock.unlock()
+    }
+
+    func finishStartupPhase() {
+        lock.lock()
+        inStartupPhase = false
+        lock.unlock()
+    }
+
+    var hasStartupError: Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return failed
+    }
+}
+
 @MainActor
 public final class CameraPresenceMonitor: PresenceMonitoring {
     private let clock: SessionClock
     private let authorizer: CameraAuthorizing
     private let detector: PersonDetecting
     private let thermalStateProvider: @Sendable () -> ProcessInfo.ThermalState
+    private let sessionDriverFactory: @Sendable () -> CaptureSessionDriving
+    private let notificationCenter: NotificationCenter
     private let broadcaster = StreamBroadcaster<PresenceMonitorEvent>()
     private let frameCoordinator: FrameAnalysisCoordinator
 
     private let captureQueue = DispatchQueue(label: "vn.tamhoc.camera.capture", qos: .userInitiated)
     private let analysisQueue = DispatchQueue(label: "vn.tamhoc.camera.analysis", qos: .userInitiated)
 
-    private var captureSession: AVCaptureSession?
-    private var pendingSetupSession: (generation: UUID, token: UUID, session: AVCaptureSession)?
+    private var captureDriver: CaptureSessionDriving?
+    private var pendingSetupDriver: (generation: UUID, token: UUID, driver: CaptureSessionDriving)?
     private var sampleDelegate: CaptureSampleDelegate?
     private var observerBox: NotificationObserverBox?
     private var activeGeneration: UUID?
@@ -329,19 +445,23 @@ public final class CameraPresenceMonitor: PresenceMonitoring {
 
     /// Available only for CalibrationView live preview; never shown during FocusView.
     public var previewCaptureSession: AVCaptureSession? {
-        captureSession
+        captureDriver?.rawCaptureSession
     }
 
     public init(
         clock: SessionClock = SystemSessionClock(),
         authorizer: CameraAuthorizing = SystemCameraAuthorizer(),
         detector: PersonDetecting = VisionPersonDetector(),
-        thermalStateProvider: @escaping @Sendable () -> ProcessInfo.ThermalState = { ProcessInfo.processInfo.thermalState }
+        thermalStateProvider: @escaping @Sendable () -> ProcessInfo.ThermalState = { ProcessInfo.processInfo.thermalState },
+        sessionDriverFactory: @escaping @Sendable () -> CaptureSessionDriving = { AVCaptureSessionDriver() },
+        notificationCenter: NotificationCenter = .default
     ) {
         self.clock = clock
         self.authorizer = authorizer
         self.detector = detector
         self.thermalStateProvider = thermalStateProvider
+        self.sessionDriverFactory = sessionDriverFactory
+        self.notificationCenter = notificationCenter
         let broadcaster = self.broadcaster
         self.frameCoordinator = FrameAnalysisCoordinator(
             clock: clock,
@@ -413,32 +533,43 @@ public final class CameraPresenceMonitor: PresenceMonitoring {
             throw PresenceMonitorError.thermalCritical
         }
 
-        let session = AVCaptureSession()
+        let driver = sessionDriverFactory()
         let delegate = CaptureSampleDelegate(coordinator: frameCoordinator)
-        pendingSetupSession = (generation: generation, token: runToken, session: session)
+        let startupTracker = StartupErrorTracker()
+        let sessionObserver = makeSessionObserver(
+            for: driver,
+            runToken: runToken,
+            startupTracker: startupTracker
+        )
+
+        pendingSetupDriver = (generation: generation, token: runToken, driver: driver)
         frameCoordinator.prepareRun(generation: generation, token: runToken)
 
-        let configured = await configureAndStartSession(
-            session: session,
+        let started = await configureAndStartDriver(
+            driver: driver,
             delegate: delegate,
             generation: generation,
             runToken: runToken,
             calibration: calibration,
-            thermal: thermal
+            thermal: thermal,
+            startupTracker: startupTracker
         )
 
-        if pendingSetupSession?.token == runToken {
-            pendingSetupSession = nil
+        if pendingSetupDriver?.token == runToken {
+            pendingSetupDriver = nil
         }
 
         guard desiredRunToken == runToken, !Task.isCancelled else {
+            sessionObserver.invalidate()
             frameCoordinator.deactivateIfMatching(token: runToken)
-            await stopSessionOnQueue(session)
+            await stopDriverOnQueue(driver)
             throw CancellationError()
         }
 
-        guard configured else {
+        guard started, driver.isRunning, !startupTracker.hasStartupError else {
+            sessionObserver.invalidate()
             frameCoordinator.deactivateIfMatching(token: runToken)
+            await stopDriverOnQueue(driver)
             if desiredRunToken == runToken {
                 desiredRunToken = nil
                 desiredGeneration = nil
@@ -446,10 +577,11 @@ public final class CameraPresenceMonitor: PresenceMonitoring {
             throw PresenceMonitorError.cameraUnavailable
         }
 
-        self.captureSession = session
+        startupTracker.finishStartupPhase()
+        self.captureDriver = driver
         self.sampleDelegate = delegate
+        self.observerBox = sessionObserver
         self.activeGeneration = generation
-        installObservers(for: session)
     }
 
     public func stop(generation: UUID) async {
@@ -459,26 +591,26 @@ public final class CameraPresenceMonitor: PresenceMonitoring {
             desiredRunToken = nil
         }
 
-        var sessionsToStop: [AVCaptureSession] = []
-        if let pending = pendingSetupSession, pending.generation == generation {
-            pendingSetupSession = nil
-            sessionsToStop.append(pending.session)
+        var driversToStop: [CaptureSessionDriving] = []
+        if let pending = pendingSetupDriver, pending.generation == generation {
+            pendingSetupDriver = nil
+            driversToStop.append(pending.driver)
         }
         if activeGeneration == generation {
             activeGeneration = nil
             observerBox?.invalidate()
             observerBox = nil
             sampleDelegate = nil
-            if let running = captureSession {
-                captureSession = nil
-                if !sessionsToStop.contains(where: { $0 === running }) {
-                    sessionsToStop.append(running)
+            if let running = captureDriver {
+                captureDriver = nil
+                if !driversToStop.contains(where: { $0 === running }) {
+                    driversToStop.append(running)
                 }
             }
         }
 
-        for session in sessionsToStop {
-            await stopSessionOnQueue(session)
+        for driver in driversToStop {
+            await stopDriverOnQueue(driver)
         }
     }
 
@@ -496,98 +628,47 @@ public final class CameraPresenceMonitor: PresenceMonitoring {
         observerBox?.invalidate()
         observerBox = nil
 
-        let pending = pendingSetupSession
+        let pending = pendingSetupDriver
         if pending != nil && pending?.token != preservingToken {
-            pendingSetupSession = nil
+            pendingSetupDriver = nil
         }
-        let running = captureSession
-        captureSession = nil
+        let running = captureDriver
+        captureDriver = nil
         sampleDelegate = nil
 
-        if let pendingSession = pending?.session, pending?.token != preservingToken {
-            await stopSessionOnQueue(pendingSession)
+        if let pendingDriver = pending?.driver, pending?.token != preservingToken {
+            await stopDriverOnQueue(pendingDriver)
         }
-        if let running = running, running !== pending?.session {
-            await stopSessionOnQueue(running)
+        if let running = running, running !== pending?.driver {
+            await stopDriverOnQueue(running)
         }
     }
 
-    private func stopSessionOnQueue(_ session: AVCaptureSession) async {
+    private func stopDriverOnQueue(_ driver: CaptureSessionDriving) async {
         await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
             captureQueue.async {
-                if session.isRunning {
-                    session.stopRunning()
-                }
+                driver.stopRunning()
                 continuation.resume()
             }
         }
     }
 
-    private func configureAndStartSession(
-        session: AVCaptureSession,
+    private func configureAndStartDriver(
+        driver: CaptureSessionDriving,
         delegate: CaptureSampleDelegate,
         generation: UUID,
         runToken: UUID,
         calibration: Calibration,
-        thermal: ProcessInfo.ThermalState
+        thermal: ProcessInfo.ThermalState,
+        startupTracker: StartupErrorTracker
     ) async -> Bool {
         let analysisQueue = self.analysisQueue
         let frameCoordinator = self.frameCoordinator
 
         return await withCheckedContinuation { continuation in
             captureQueue.async {
-                guard let device = AVCaptureDevice.default(
-                    .builtInWideAngleCamera,
-                    for: .video,
-                    position: .front
-                ) else {
-                    continuation.resume(returning: false)
-                    return
-                }
-
                 do {
-                    let input = try AVCaptureDeviceInput(device: device)
-                    session.beginConfiguration()
-                    if session.canSetSessionPreset(.vga640x480) {
-                        session.sessionPreset = .vga640x480
-                    } else if session.canSetSessionPreset(.medium) {
-                        session.sessionPreset = .medium
-                    }
-
-                    guard session.canAddInput(input) else {
-                        session.commitConfiguration()
-                        continuation.resume(returning: false)
-                        return
-                    }
-                    session.addInput(input)
-
-                    let output = AVCaptureVideoDataOutput()
-                    output.alwaysDiscardsLateVideoFrames = true
-                    output.setSampleBufferDelegate(delegate, queue: analysisQueue)
-
-                    guard session.canAddOutput(output) else {
-                        session.commitConfiguration()
-                        continuation.resume(returning: false)
-                        return
-                    }
-                    session.addOutput(output)
-
-                    if output.availableVideoPixelFormatTypes.contains(kCVPixelFormatType_420YpCbCr8BiPlanarFullRange) {
-                        output.videoSettings = [
-                            kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_420YpCbCr8BiPlanarFullRange
-                        ]
-                    }
-
-                    if let connection = output.connection(with: .video) {
-                        if connection.isVideoOrientationSupported {
-                            connection.videoOrientation = .portrait
-                        }
-                        if connection.isVideoMirroringSupported {
-                            connection.isVideoMirrored = false
-                        }
-                    }
-
-                    session.commitConfiguration()
+                    try driver.configure(delegate: delegate, analysisQueue: analysisQueue)
                     guard frameCoordinator.activateIfPending(
                         generation: generation,
                         token: runToken,
@@ -597,31 +678,43 @@ public final class CameraPresenceMonitor: PresenceMonitoring {
                         continuation.resume(returning: false)
                         return
                     }
-                    session.startRunning()
+                    driver.startRunning()
+                    guard driver.isRunning, !startupTracker.hasStartupError else {
+                        frameCoordinator.deactivateIfMatching(token: runToken)
+                        driver.stopRunning()
+                        continuation.resume(returning: false)
+                        return
+                    }
                     continuation.resume(returning: true)
                 } catch {
-                    if session.isRunning {
-                        session.stopRunning()
-                    }
+                    frameCoordinator.deactivateIfMatching(token: runToken)
+                    driver.stopRunning()
                     continuation.resume(returning: false)
                 }
             }
         }
     }
 
-    private func installObservers(for session: AVCaptureSession) {
+    private func makeSessionObserver(
+        for driver: CaptureSessionDriving,
+        runToken: UUID,
+        startupTracker: StartupErrorTracker
+    ) -> NotificationObserverBox {
         let coordinator = self.frameCoordinator
-        self.observerBox = NotificationObserverBox(
-            center: .default,
-            registrations: [
-                (AVCaptureSession.wasInterruptedNotification, {
-                    coordinator.emitIssue(.cameraUnavailable)
+        let thermalProvider = self.thermalStateProvider
+        return NotificationObserverBox(
+            center: notificationCenter,
+            scopedRegistrations: [
+                (AVCaptureSession.wasInterruptedNotification, driver.notificationSender, {
+                    startupTracker.recordStartupFailure()
+                    coordinator.emitIssue(.cameraUnavailable, forToken: runToken)
                 }),
-                (AVCaptureSession.runtimeErrorNotification, {
-                    coordinator.emitIssue(.cameraUnavailable)
+                (AVCaptureSession.runtimeErrorNotification, driver.notificationSender, {
+                    startupTracker.recordStartupFailure()
+                    coordinator.emitIssue(.cameraUnavailable, forToken: runToken)
                 }),
-                (ProcessInfo.thermalStateDidChangeNotification, {
-                    coordinator.updateThermalState(ProcessInfo.processInfo.thermalState)
+                (ProcessInfo.thermalStateDidChangeNotification, nil, {
+                    coordinator.updateThermalState(thermalProvider())
                 })
             ]
         )

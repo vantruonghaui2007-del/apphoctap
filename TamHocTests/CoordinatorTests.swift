@@ -605,4 +605,42 @@ final class CoordinatorTests: XCTestCase {
         XCTAssertEqual(coordinator.lastCompletedRecord?.status, .completed)
         XCTAssertFalse(coordinator.isFinalizing)
     }
+
+    func testCoordinatorDoesNotCommitRunningWhenCaptureReadinessFails() async throws {
+        let center = NotificationCenter()
+        let failingDriver = FakeCaptureSessionDriver(
+            notificationCenter: center,
+            shouldBecomeRunning: false,
+            postRuntimeErrorOnStart: true
+        )
+        let realCameraMonitor = CameraPresenceMonitor(
+            clock: FakeClock(),
+            authorizer: FakeCameraAuthorizer(status: .authorized, frontCameraAvailable: true),
+            detector: VisionPersonDetector(),
+            thermalStateProvider: { .nominal },
+            sessionDriverFactory: { failingDriver },
+            notificationCenter: center
+        )
+        let idle = FakeIdleTimerController()
+        let coordinator = SessionCoordinator(
+            clock: FakeClock(),
+            lockMonitor: FakeGuidedAccessMonitor(isEnabled: true),
+            presenceMonitor: realCameraMonitor,
+            repository: MockSessionRepository(),
+            warningPlayer: SpyWarningPlayer(),
+            idleTimerController: idle,
+            backgroundTaskManager: FakeBackgroundTaskManager()
+        )
+
+        do {
+            try await coordinator.start(configuration: try cameraConfig(), calibration: .defaultCentered)
+            XCTFail("Expected cameraUnavailable when capture readiness fails")
+        } catch let error as PresenceMonitorError {
+            XCTAssertEqual(error, .cameraUnavailable)
+        }
+
+        XCTAssertNil(coordinator.snapshot)
+        XCTAssertFalse(failingDriver.isRunning)
+        XCTAssertFalse(idle.isAwakeDisabled)
+    }
 }

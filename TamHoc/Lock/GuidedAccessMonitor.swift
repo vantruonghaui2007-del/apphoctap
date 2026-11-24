@@ -21,6 +21,16 @@ final class NotificationObserverBox: @unchecked Sendable {
         }
     }
 
+    init(center: NotificationCenter, scopedRegistrations: [(Notification.Name, AnyObject?, @Sendable () -> Void)]) {
+        self.center = center
+        for (name, sender, handler) in scopedRegistrations {
+            let token = center.addObserver(forName: name, object: sender, queue: nil) { _ in
+                handler()
+            }
+            tokens.append(token)
+        }
+    }
+
     func invalidate() {
         for token in tokens {
             center.removeObserver(token)

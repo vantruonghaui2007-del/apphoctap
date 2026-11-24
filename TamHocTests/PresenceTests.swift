@@ -426,4 +426,60 @@ final class PresenceTests: XCTestCase {
         XCTAssertEqual(emitted.count, 1)
         XCTAssertEqual(emitted.first?.generation, newGen)
     }
+
+    @MainActor
+    func testCameraStartFailsWhenCaptureFailsToRunOrPostsImmediateRuntimeError() async {
+        // Case 1: configure succeeds, startRunning leaves isRunning == false
+        let center1 = NotificationCenter()
+        let nonRunningDriver = FakeCaptureSessionDriver(
+            notificationCenter: center1,
+            shouldBecomeRunning: false,
+            postRuntimeErrorOnStart: false
+        )
+        let monitor1 = CameraPresenceMonitor(
+            clock: FakeClock(),
+            authorizer: FakeCameraAuthorizer(status: .authorized, frontCameraAvailable: true),
+            detector: VisionPersonDetector(),
+            thermalStateProvider: { .nominal },
+            sessionDriverFactory: { nonRunningDriver },
+            notificationCenter: center1
+        )
+
+        do {
+            try await monitor1.start(calibration: .defaultCentered, generation: UUID())
+            XCTFail("Expected cameraUnavailable when session fails to become running")
+        } catch let error as PresenceMonitorError {
+            XCTAssertEqual(error, .cameraUnavailable)
+        } catch {
+            XCTFail("Unexpected error: \(error)")
+        }
+        XCTAssertFalse(nonRunningDriver.isRunning)
+
+        // Case 2: startRunning sets running=true AND immediately posts runtimeErrorNotification
+        let center2 = NotificationCenter()
+        let runtimeErrDriver = FakeCaptureSessionDriver(
+            notificationCenter: center2,
+            shouldBecomeRunning: true,
+            postRuntimeErrorOnStart: true
+        )
+        let monitor2 = CameraPresenceMonitor(
+            clock: FakeClock(),
+            authorizer: FakeCameraAuthorizer(status: .authorized, frontCameraAvailable: true),
+            detector: VisionPersonDetector(),
+            thermalStateProvider: { .nominal },
+            sessionDriverFactory: { runtimeErrDriver },
+            notificationCenter: center2
+        )
+
+        do {
+            try await monitor2.start(calibration: .defaultCentered, generation: UUID())
+            XCTFail("Expected cameraUnavailable on immediate startup runtimeErrorNotification")
+        } catch let error as PresenceMonitorError {
+            XCTAssertEqual(error, .cameraUnavailable)
+        } catch {
+            XCTFail("Unexpected error: \(error)")
+        }
+        XCTAssertFalse(runtimeErrDriver.isRunning)
+        XCTAssertGreaterThanOrEqual(runtimeErrDriver.stopCallCount, 1)
+    }
 }
