@@ -308,10 +308,34 @@ final class CoordinatorTests: XCTestCase {
         await coordinator.endEarly()
     }
 
+    private func awaitTaskWithTimeout<T: Sendable>(
+        _ task: Task<T, Never>,
+        timeoutNanoseconds: UInt64 = 1_500_000_000
+    ) async -> T? {
+        await withTaskGroup(of: T?.self) { group in
+            group.addTask {
+                await withTaskCancellationHandler {
+                    await task.value
+                } onCancel: {
+                    task.cancel()
+                }
+            }
+            group.addTask {
+                try? await Task.sleep(nanoseconds: timeoutNanoseconds)
+                return nil
+            }
+            let first = await group.next() ?? nil
+            task.cancel()
+            group.cancelAll()
+            return first
+        }
+    }
+
     func testResumeCameraStartSuspendedThenEndEarlyLeavesCameraStopped() async throws {
         let clock = FakeClock(monotonicSeconds: 0)
         let lock = FakeGuidedAccessMonitor(isEnabled: true)
         let presence = FakePresenceMonitor()
+        defer { presence.releaseAllSuspendedStarts() }
         let repo = MockSessionRepository()
         let coordinator = makeCoordinator(clock: clock, lock: lock, presence: presence, repo: repo)
 
@@ -328,14 +352,25 @@ final class CoordinatorTests: XCTestCase {
         presence.suspendNextStart()
         clock.advance(by: 5)
         coordinator.receiveActivity(.active)
-        await presence.waitUntilStartSuspended()
+        XCTAssertTrue(await presence.waitUntilStartSuspended())
 
-        // End session early while resume start is still awaiting
-        await coordinator.endEarly()
+        // Request endEarly concurrently while resume start is still suspended
+        let endTask = Task { () -> Bool in
+            await coordinator.endEarly()
+            return true
+        }
 
-        // Complete the delayed camera start AFTER session ended
+        // Wait (bounded) until session transitions to terminal while camera start is still pending
+        for _ in 0..<60 where coordinator.lastCompletedRecord == nil {
+            try? await Task.sleep(nanoseconds: 5_000_000)
+        }
+        XCTAssertEqual(coordinator.lastCompletedRecord?.status, .endedEarly(.userEnded))
+
+        // Now allow the delayed camera start to finish AFTER terminal transition
         presence.resumeSuspendedStart()
-        try? await Task.sleep(nanoseconds: 40_000_000)
+
+        let finishedInTime = await awaitTaskWithTimeout(endTask)
+        XCTAssertEqual(finishedInTime, true, "endEarly must finish promptly once delayed camera start resumes")
 
         XCTAssertFalse(presence.isCapturing, "Camera must NOT stay running after session ended")
         XCTAssertEqual(coordinator.lastCompletedRecord?.status, .endedEarly(.userEnded))
@@ -347,6 +382,7 @@ final class CoordinatorTests: XCTestCase {
         let clock = FakeClock(monotonicSeconds: 0)
         let lock = FakeGuidedAccessMonitor(isEnabled: true)
         let presence = FakePresenceMonitor()
+        defer { presence.releaseAllSuspendedStarts() }
         let repo = MockSessionRepository()
         let coordinator = makeCoordinator(clock: clock, lock: lock, presence: presence, repo: repo)
 
@@ -362,7 +398,7 @@ final class CoordinatorTests: XCTestCase {
         presence.suspendNextStart()
         clock.advance(by: 5)
         coordinator.receiveActivity(.active)
-        await presence.waitUntilStartSuspended()
+        XCTAssertTrue(await presence.waitUntilStartSuspended())
 
         coordinator.receiveActivity(.inactive)
         presence.resumeSuspendedStart()
@@ -389,6 +425,7 @@ final class CoordinatorTests: XCTestCase {
         let clock = FakeClock(monotonicSeconds: 0)
         let lock = FakeGuidedAccessMonitor(isEnabled: true)
         let presence = FakePresenceMonitor()
+        defer { presence.releaseAllSuspendedStarts() }
         let repo = MockSessionRepository()
         let idle = FakeIdleTimerController()
         let coordinator = makeCoordinator(clock: clock, lock: lock, presence: presence, repo: repo, idle: idle)
@@ -399,7 +436,7 @@ final class CoordinatorTests: XCTestCase {
         let task1 = Task {
             try await coordinator.start(configuration: cfg, calibration: .defaultCentered)
         }
-        await presence.waitUntilStartSuspended()
+        XCTAssertTrue(await presence.waitUntilStartSuspended())
         coordinator.receiveActivity(.inactive)
         presence.resumeSuspendedStart()
 

@@ -76,7 +76,6 @@ final class FakePresenceMonitor: PresenceMonitoring {
 
     private var shouldSuspendNextStart = false
     private var suspendedContinuation: CheckedContinuation<Void, Never>?
-    private var suspendedEnteredContinuation: CheckedContinuation<Void, Never>?
 
     var events: AsyncStream<PresenceMonitorEvent> {
         broadcaster.makeStream()
@@ -86,16 +85,26 @@ final class FakePresenceMonitor: PresenceMonitoring {
         shouldSuspendNextStart = true
     }
 
-    func waitUntilStartSuspended() async {
-        if suspendedContinuation != nil { return }
-        await withCheckedContinuation { continuation in
-            suspendedEnteredContinuation = continuation
+    func waitUntilStartSuspended(timeoutNanoseconds: UInt64 = 1_000_000_000) async -> Bool {
+        if suspendedContinuation != nil { return true }
+        let deadline = DispatchTime.now().uptimeNanoseconds + timeoutNanoseconds
+        while suspendedContinuation == nil {
+            if DispatchTime.now().uptimeNanoseconds >= deadline {
+                return false
+            }
+            try? await Task.sleep(nanoseconds: 5_000_000)
         }
+        return true
     }
 
     func resumeSuspendedStart() {
         suspendedContinuation?.resume()
         suspendedContinuation = nil
+    }
+
+    func releaseAllSuspendedStarts() {
+        shouldSuspendNextStart = false
+        resumeSuspendedStart()
     }
 
     func start(calibration: Calibration, generation: UUID) async throws {
@@ -107,8 +116,6 @@ final class FakePresenceMonitor: PresenceMonitoring {
             shouldSuspendNextStart = false
             await withCheckedContinuation { continuation in
                 suspendedContinuation = continuation
-                suspendedEnteredContinuation?.resume()
-                suspendedEnteredContinuation = nil
             }
         }
 
