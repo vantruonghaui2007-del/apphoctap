@@ -163,7 +163,7 @@ private extension AppEnvironment {
             presenceMonitor: presenceMonitor,
             repository: sessionRepository,
             warningPlayer: warningPlayer,
-            initialActivity: activityMonitor.currentState
+            initialActivity: .active
         )
 
         return DebugHarness(
