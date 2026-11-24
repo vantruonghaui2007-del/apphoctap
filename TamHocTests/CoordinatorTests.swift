@@ -6,19 +6,19 @@ import StudyCore
 final class CoordinatorTests: XCTestCase {
     private func makeCoordinator(
         clock: FakeClock = FakeClock(),
-        lock: FakeGuidedAccessMonitor = FakeGuidedAccessMonitor(isEnabled: true),
-        presence: FakePresenceMonitor = FakePresenceMonitor(),
+        lock: FakeGuidedAccessMonitor? = nil,
+        presence: FakePresenceMonitor? = nil,
         repo: MockSessionRepository = MockSessionRepository(),
-        warning: SpyWarningPlayer = SpyWarningPlayer(),
-        idle: FakeIdleTimerController = FakeIdleTimerController()
+        warning: SpyWarningPlayer? = nil,
+        idle: FakeIdleTimerController? = nil
     ) -> SessionCoordinator {
         SessionCoordinator(
             clock: clock,
-            lockMonitor: lock,
-            presenceMonitor: presence,
+            lockMonitor: lock ?? FakeGuidedAccessMonitor(isEnabled: true),
+            presenceMonitor: presence ?? FakePresenceMonitor(),
             repository: repo,
-            warningPlayer: warning,
-            idleTimerController: idle,
+            warningPlayer: warning ?? SpyWarningPlayer(),
+            idleTimerController: idle ?? FakeIdleTimerController(),
             backgroundTaskManager: FakeBackgroundTaskManager()
         )
     }

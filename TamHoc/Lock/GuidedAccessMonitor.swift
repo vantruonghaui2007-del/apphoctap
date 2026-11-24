@@ -99,7 +99,7 @@ final class StreamBroadcaster<Element: Sendable>: @unchecked Sendable {
 
 @MainActor
 public final class GuidedAccessMonitor: GuidedAccessMonitoring {
-    private let statusProvider: () -> Bool
+    private let statusProvider: @MainActor () -> Bool
     private let broadcaster = StreamBroadcaster<Bool>()
     private var observerBox: NotificationObserverBox?
     private var lastPublishedValue: Bool
@@ -109,12 +109,13 @@ public final class GuidedAccessMonitor: GuidedAccessMonitoring {
     }
 
     public init(
-        statusProvider: @escaping () -> Bool = { UIAccessibility.isGuidedAccessEnabled },
+        statusProvider: (@MainActor () -> Bool)? = nil,
         notificationCenter: NotificationCenter = .default,
         notificationName: Notification.Name = UIAccessibility.guidedAccessStatusDidChangeNotification
     ) {
-        self.statusProvider = statusProvider
-        self.lastPublishedValue = statusProvider()
+        let provider: @MainActor () -> Bool = statusProvider ?? { UIAccessibility.isGuidedAccessEnabled }
+        self.statusProvider = provider
+        self.lastPublishedValue = provider()
 
         self.observerBox = NotificationObserverBox(
             center: notificationCenter,

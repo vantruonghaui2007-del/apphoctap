@@ -10,11 +10,11 @@ public final class AppActivityMonitor {
     private var observerBox: NotificationObserverBox?
 
     public init(
-        initialState: ActivityState = AppActivityMonitor.readCurrentUIApplicationState(),
+        initialState: ActivityState? = nil,
         notificationCenter: NotificationCenter = .default,
         observeSystemNotifications: Bool = true
     ) {
-        self.currentState = initialState
+        self.currentState = initialState ?? Self.readCurrentUIApplicationState()
         if observeSystemNotifications {
             self.observerBox = NotificationObserverBox(
                 center: notificationCenter,

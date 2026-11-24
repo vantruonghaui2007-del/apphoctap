@@ -1,0 +1,74 @@
+--- a/TamHoc/Platform/AppActivityMonitor.swift
++++ b/TamHoc/Platform/AppActivityMonitor.swift
+@@ -10,11 +10,11 @@
+     private var observerBox: NotificationObserverBox?
+ 
+     public init(
+-        initialState: ActivityState = AppActivityMonitor.readCurrentUIApplicationState(),
++        initialState: ActivityState? = nil,
+         notificationCenter: NotificationCenter = .default,
+         observeSystemNotifications: Bool = true
+     ) {
+-        self.currentState = initialState
++        self.currentState = initialState ?? Self.readCurrentUIApplicationState()
+         if observeSystemNotifications {
+             self.observerBox = NotificationObserverBox(
+                 center: notificationCenter,
+--- a/TamHoc/Lock/GuidedAccessMonitor.swift
++++ b/TamHoc/Lock/GuidedAccessMonitor.swift
+@@ -99,7 +99,7 @@
+ 
+ @MainActor
+ public final class GuidedAccessMonitor: GuidedAccessMonitoring {
+-    private let statusProvider: () -> Bool
++    private let statusProvider: @MainActor () -> Bool
+     private let broadcaster = StreamBroadcaster<Bool>()
+     private var observerBox: NotificationObserverBox?
+     private var lastPublishedValue: Bool
+@@ -109,12 +109,13 @@
+     }
+ 
+     public init(
+-        statusProvider: @escaping () -> Bool = { UIAccessibility.isGuidedAccessEnabled },
++        statusProvider: (@MainActor () -> Bool)? = nil,
+         notificationCenter: NotificationCenter = .default,
+         notificationName: Notification.Name = UIAccessibility.guidedAccessStatusDidChangeNotification
+     ) {
+-        self.statusProvider = statusProvider
+-        self.lastPublishedValue = statusProvider()
++        let provider: @MainActor () -> Bool = statusProvider ?? { UIAccessibility.isGuidedAccessEnabled }
++        self.statusProvider = provider
++        self.lastPublishedValue = provider()
+ 
+         self.observerBox = NotificationObserverBox(
+             center: notificationCenter,
+--- a/TamHocTests/CoordinatorTests.swift
++++ b/TamHocTests/CoordinatorTests.swift
+@@ -6,19 +6,19 @@
+ final class CoordinatorTests: XCTestCase {
+     private func makeCoordinator(
+         clock: FakeClock = FakeClock(),
+-        lock: FakeGuidedAccessMonitor = FakeGuidedAccessMonitor(isEnabled: true),
+-        presence: FakePresenceMonitor = FakePresenceMonitor(),
++        lock: FakeGuidedAccessMonitor? = nil,
++        presence: FakePresenceMonitor? = nil,
+         repo: MockSessionRepository = MockSessionRepository(),
+-        warning: SpyWarningPlayer = SpyWarningPlayer(),
+-        idle: FakeIdleTimerController = FakeIdleTimerController()
++        warning: SpyWarningPlayer? = nil,
++        idle: FakeIdleTimerController? = nil
+     ) -> SessionCoordinator {
+         SessionCoordinator(
+             clock: clock,
+-            lockMonitor: lock,
+-            presenceMonitor: presence,
++            lockMonitor: lock ?? FakeGuidedAccessMonitor(isEnabled: true),
++            presenceMonitor: presence ?? FakePresenceMonitor(),
+             repository: repo,
+-            warningPlayer: warning,
+-            idleTimerController: idle,
++            warningPlayer: warning ?? SpyWarningPlayer(),
++            idleTimerController: idle ?? FakeIdleTimerController(),
+             backgroundTaskManager: FakeBackgroundTaskManager()
+         )
+     }

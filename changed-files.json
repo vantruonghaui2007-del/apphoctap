@@ -1,0 +1,17 @@
+[
+  {
+    "path": "TamHoc/Platform/AppActivityMonitor.swift",
+    "original_sha256": "e6afa1f953948f032d7ee0184759d43288c74e4562d5a5eed5352d790460906e",
+    "fixed_sha256": "56fbc655e25e1c6804833742845a9977ce9b8e7aba5821e00b7ea9e6183554d5"
+  },
+  {
+    "path": "TamHoc/Lock/GuidedAccessMonitor.swift",
+    "original_sha256": "da3c871d1240472ccdbc2f5d2efe439ea8e45c2daded3908c62b23959f4bb5a2",
+    "fixed_sha256": "a744c51d93e62873295b47b1708e3418a89cafa4c2030fd083f63748a1be0a81"
+  },
+  {
+    "path": "TamHocTests/CoordinatorTests.swift",
+    "original_sha256": "3f3432e65419434891bbdef034e1b6d7bb0ada3e10f9f72ccd81064a195b11b4",
+    "fixed_sha256": "cb5fa20ddbcfd6654aa2ade03797ff651111cff53f83ddad772c5f28212aa3da"
+  }
+]
