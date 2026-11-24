@@ -176,7 +176,6 @@ public final class SessionCoordinator: ObservableObject {
             preStartThermalToken = nil
             let preStartTask = Task { [weak self] in
                 for await event in preStartEvents {
-                    guard !Task.isCancelled else { break }
                     if event.generation == initialCaptureToken,
                        case .unknown(.thermal) = event.sample.value {
                         self?.preStartThermalToken = initialCaptureToken
@@ -189,6 +188,7 @@ public final class SessionCoordinator: ObservableObject {
                 try await presenceMonitor.start(calibration: calibration, generation: initialCaptureToken)
             } catch {
                 preStartTask.cancel()
+                await preStartTask.value
                 preStartThermalToken = nil
                 if pendingGeneration == generation {
                     pendingGeneration = nil
@@ -199,9 +199,9 @@ public final class SessionCoordinator: ObservableObject {
                 throw error
             }
 
-            await Task.yield()
-            await Task.yield()
+            // Process buffered startup events before checking the thermal result.
             preStartTask.cancel()
+            await preStartTask.value
             let sawThermalDuringStart = (preStartThermalToken == initialCaptureToken)
             preStartThermalToken = nil
 

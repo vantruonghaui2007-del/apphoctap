@@ -182,7 +182,11 @@ final class RepositoryTests: XCTestCase {
         let loadedSettings = try await settingsRepo.loadSettings()
         XCTAssertEqual(loadedSettings, custom)
 
-        let cal = try Calibration(roiX: 0.2, roiY: 0.2, roiWidth: 0.6, roiHeight: 0.6)
+        // Use a fixed timestamp representable by the repository's ISO8601 format.
+        let cal = try Calibration(
+            roiX: 0.2, roiY: 0.2, roiWidth: 0.6, roiHeight: 0.6,
+            calibratedAt: Date(timeIntervalSince1970: 1_795_400_000.25)
+        )
         try await settingsRepo.saveCalibration(cal)
         let loadedCal = try await settingsRepo.loadCalibration()
         XCTAssertEqual(loadedCal, cal)
