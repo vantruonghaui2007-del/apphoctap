@@ -110,7 +110,7 @@ jobs:
           executable = info["CFBundleExecutable"]
           if pathlib.Path(executable).name != executable:
               raise SystemExit("Invalid executable name")
-          subprocess.run(["lipo", "-verify_arch", "arm64", str(app / executable)], check=True)
+          subprocess.run(["lipo", str(app / executable), "-verify_arch", "arm64"], check=True)
           print("Validated device app:", info["CFBundleIdentifier"], "iOS 15.7+, arm64")
           PY
           STAGING="$(mktemp -d "$RUNNER_TEMP/tamhoc-ipa.XXXXXX")"
