@@ -1,0 +1,166 @@
+name: Build iOS IPA
+
+on:
+  push:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ios-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 45
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_16.4.app/Contents/Developer
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Show toolchain
+        run: |
+          set -euo pipefail
+          xcodebuild -version
+          xcrun swift --version
+          mkdir -p artifacts
+
+      - name: Run StudyCore tests
+        run: |
+          set -euo pipefail
+          swift test --package-path Packages/StudyCore 2>&1 | tee artifacts/studycore-tests.log
+
+      - name: Select and boot an available iPhone simulator
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json, os, subprocess, uuid
+          data = json.loads(subprocess.check_output(
+              ["xcrun", "simctl", "list", "devices", "available", "--json"], text=True))
+          def version(parts):
+              values = tuple(map(int, parts))
+              return values + (0,) * (3 - len(values))
+          sdk = version(subprocess.check_output(
+              ["xcrun", "--sdk", "iphonesimulator", "--show-sdk-version"], text=True).strip().split("."))
+          prefix = "com.apple.CoreSimulator.SimRuntime.iOS-"
+          candidates = [(version(runtime[len(prefix):].split("-")), device)
+                        for runtime, devices in data["devices"].items()
+                        if runtime.startswith(prefix)
+                        and version(runtime[len(prefix):].split("-")) <= sdk
+                        for device in devices
+                        if device.get("isAvailable") and device["name"].startswith("iPhone")]
+          if not candidates:
+              raise SystemExit("No available iPhone simulator runtime on this runner")
+          latest = max(v for v, _ in candidates)
+          devices = [d for v, d in candidates if v == latest]
+          device = next((d for d in devices if d.get("state") == "Booted"), devices[0])
+          udid = str(uuid.UUID(device["udid"]))
+          print("Using simulator:", device["name"], udid)
+          with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as output:
+              output.write("TAMHOC_SIMULATOR_ID=" + udid + "\n")
+          if device.get("state") != "Booted":
+              subprocess.run(["xcrun", "simctl", "boot", udid], check=True)
+          subprocess.run(["xcrun", "simctl", "bootstatus", udid, "-b"], check=True)
+          PY
+
+      - name: Run native unit and UI tests
+        run: |
+          set -euo pipefail
+          xcodebuild -project TamHoc.xcodeproj -scheme TamHoc -configuration Debug \
+            -destination "platform=iOS Simulator,id=$TAMHOC_SIMULATOR_ID" \
+            -destination-timeout 120 \
+            -derivedDataPath "$RUNNER_TEMP/TamHoc-Simulator" \
+            -resultBundlePath artifacts/Tests.xcresult \
+            -parallel-testing-enabled NO \
+            CODE_SIGNING_ALLOWED=NO test 2>&1 | tee artifacts/native-tests.log
+
+      - name: Build Release for physical iPhone without signing
+        run: |
+          set -euo pipefail
+          xcodebuild -project TamHoc.xcodeproj -scheme TamHoc -configuration Release \
+            -sdk iphoneos -destination 'generic/platform=iOS' \
+            -derivedDataPath "$RUNNER_TEMP/TamHoc-Device" \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY='' AD_HOC_CODE_SIGNING_ALLOWED=NO \
+            build 2>&1 | tee artifacts/device-build.log
+
+      - name: Package unsigned IPA for local re-signing
+        run: |
+          set -euo pipefail
+          APP="$RUNNER_TEMP/TamHoc-Device/Build/Products/Release-iphoneos/TamHoc.app"
+          export TAMHOC_BUILT_APP="$APP"
+          python3 - <<'PY'
+          import os, pathlib, plistlib, subprocess
+          app = pathlib.Path(os.environ["TAMHOC_BUILT_APP"])
+          with (app / "Info.plist").open("rb") as source:
+              info = plistlib.load(source)
+          if info.get("MinimumOSVersion") != "15.7":
+              raise SystemExit("Expected MinimumOSVersion 15.7")
+          if "iPhoneOS" not in info.get("CFBundleSupportedPlatforms", []):
+              raise SystemExit("Expected a physical-device app, not a simulator build")
+          executable = info["CFBundleExecutable"]
+          if pathlib.Path(executable).name != executable:
+              raise SystemExit("Invalid executable name")
+          subprocess.run(["lipo", "-verify_arch", "arm64", str(app / executable)], check=True)
+          print("Validated device app:", info["CFBundleIdentifier"], "iOS 15.7+, arm64")
+          PY
+          STAGING="$(mktemp -d "$RUNNER_TEMP/tamhoc-ipa.XXXXXX")"
+          mkdir -p "$STAGING/Payload"
+          ditto "$APP" "$STAGING/Payload/TamHoc.app"
+          ditto -c -k --keepParent "$STAGING/Payload" "$GITHUB_WORKSPACE/artifacts/TamHoc-unsigned.ipa"
+          unzip -t artifacts/TamHoc-unsigned.ipa
+          (
+            cd artifacts
+            shasum -a 256 TamHoc-unsigned.ipa > TamHoc-unsigned.ipa.sha256
+          )
+          python3 - <<'PY'
+          import json, os, pathlib, subprocess
+          manifest = {
+              "commit": os.environ["GITHUB_SHA"],
+              "run_id": os.environ["GITHUB_RUN_ID"],
+              "minimum_ios": "15.7",
+              "architecture": "arm64",
+              "signed": False,
+              "installation": "Re-sign IPA locally before installing with 3uTools",
+              "xcode": subprocess.check_output(["xcodebuild", "-version"], text=True).strip(),
+              "tests": "StudyCore and native simulator tests passed in this workflow run",
+          }
+          pathlib.Path("artifacts/build-info.json").write_text(
+              json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+          PY
+          cat >> "$GITHUB_STEP_SUMMARY" <<'SUMMARY'
+          ## TamHoc IPA ready for re-signing
+          Download **TamHoc-unsigned** below and extract the GitHub artifact ZIP.
+          The IPA inside is **unsigned**: sign it locally in 3uTools before installing.
+          Simulator tests do not verify Guided Access or camera behavior on a physical iPhone.
+          SUMMARY
+
+      - name: Upload unsigned IPA
+        uses: actions/upload-artifact@v7
+        with:
+          name: TamHoc-unsigned
+          path: |
+            artifacts/TamHoc-unsigned.ipa
+            artifacts/TamHoc-unsigned.ipa.sha256
+            artifacts/build-info.json
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Upload build and test diagnostics
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: TamHoc-diagnostics-${{ github.run_attempt }}
+          path: |
+            artifacts/*.log
+            artifacts/Tests.xcresult
+          if-no-files-found: warn
+          retention-days: 7
