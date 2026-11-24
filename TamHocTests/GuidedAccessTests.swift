@@ -53,21 +53,20 @@ final class GuidedAccessTests: XCTestCase {
         XCTAssertEqual(monitor.subscriberCountForTesting, 1)
         action()
 
-        return await withTaskGroup(of: Bool?.self) { group in
-            group.addTask {
-                for await value in stream {
-                    return value
-                }
-                return nil
+        let readerTask = Task { @MainActor () -> Bool? in
+            for await value in stream {
+                return value
             }
-            group.addTask {
-                try? await Task.sleep(nanoseconds: timeoutNanoseconds)
-                return nil
-            }
-            let first = await group.next() ?? nil
-            group.cancelAll()
-            return first
+            return nil
         }
+
+        return await BoundedAsyncWaiter.waitForTask(
+            readerTask,
+            timeoutNanoseconds: timeoutNanoseconds,
+            onTimeout: {
+                readerTask.cancel()
+            }
+        )
     }
 
     func testReadingIsEnabledBeforeNotificationDoesNotDropChangeEvent() async throws {

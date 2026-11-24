@@ -63,8 +63,93 @@ final class FakeGuidedAccessMonitor: GuidedAccessMonitoring {
     }
 }
 
+enum BoundedWaitOutcome<Value: Sendable>: Sendable {
+    case completed(Value)
+    case timedOut
+}
+
+/// Thread-safe single-shot gate ensuring its CheckedContinuation is resumed at most once,
+/// even if completion and timeout race concurrently.
+final class OnceContinuationGate<Value: Sendable>: @unchecked Sendable {
+    private let lock = NSLock()
+    private var continuation: CheckedContinuation<BoundedWaitOutcome<Value>, Never>?
+    private var resolvedOutcome: BoundedWaitOutcome<Value>?
+
+    func wait() async -> BoundedWaitOutcome<Value> {
+        await withCheckedContinuation { cont in
+            lock.lock()
+            if let existing = resolvedOutcome {
+                lock.unlock()
+                cont.resume(returning: existing)
+            } else {
+                continuation = cont
+                lock.unlock()
+            }
+        }
+    }
+
+    @discardableResult
+    func resolve(_ outcome: BoundedWaitOutcome<Value>) -> Bool {
+        lock.lock()
+        guard resolvedOutcome == nil else {
+            lock.unlock()
+            return false
+        }
+        resolvedOutcome = outcome
+        let cont = continuation
+        continuation = nil
+        lock.unlock()
+        cont?.resume(returning: outcome)
+        return true
+    }
+}
+
+/// Bounded async test waiter that returns promptly on timeout even when the observed task is
+/// suspended inside a non-cancellation-aware CheckedContinuation, then runs active cleanup.
+@MainActor
+enum BoundedAsyncWaiter {
+    static func waitForTask<T: Sendable>(
+        _ task: Task<T, Never>,
+        timeoutNanoseconds: UInt64 = 1_500_000_000,
+        onTimeout: @escaping @MainActor () -> Void = {}
+    ) async -> T? {
+        let gate = OnceContinuationGate<T>()
+        let observer = Task { @MainActor in
+            let value = await task.value
+            _ = gate.resolve(.completed(value))
+        }
+        let timer = Task {
+            do {
+                try await Task.sleep(nanoseconds: timeoutNanoseconds)
+                guard !Task.isCancelled else { return }
+                _ = gate.resolve(.timedOut)
+            } catch {
+                // Cancelled after completion won the race
+            }
+        }
+
+        let outcome = await gate.wait()
+        timer.cancel()
+
+        switch outcome {
+        case .completed(let value):
+            return value
+        case .timedOut:
+            task.cancel()
+            observer.cancel()
+            onTimeout()
+            return nil
+        }
+    }
+}
+
 @MainActor
 final class FakePresenceMonitor: PresenceMonitoring {
+    private struct PendingSuspension {
+        let id: UUID
+        let continuation: CheckedContinuation<Void, Never>
+    }
+
     private let broadcaster = StreamBroadcaster<PresenceMonitorEvent>()
     var startCount = 0
     var stopCount = 0
@@ -77,7 +162,12 @@ final class FakePresenceMonitor: PresenceMonitoring {
     var emitThermalDuringStart = false
 
     private var shouldSuspendNextStart = false
-    private var suspendedContinuation: CheckedContinuation<Void, Never>?
+    private var suspendedQueue: [PendingSuspension] = []
+    private var abortedSuspensionIDs: Set<UUID> = []
+
+    var pendingSuspendedCount: Int {
+        suspendedQueue.count
+    }
 
     var events: AsyncStream<PresenceMonitorEvent> {
         broadcaster.makeStream()
@@ -88,9 +178,9 @@ final class FakePresenceMonitor: PresenceMonitoring {
     }
 
     func waitUntilStartSuspended(timeoutNanoseconds: UInt64 = 1_000_000_000) async -> Bool {
-        if suspendedContinuation != nil { return true }
+        if !suspendedQueue.isEmpty { return true }
         let deadline = DispatchTime.now().uptimeNanoseconds + timeoutNanoseconds
-        while suspendedContinuation == nil {
+        while suspendedQueue.isEmpty {
             if DispatchTime.now().uptimeNanoseconds >= deadline {
                 return false
             }
@@ -100,13 +190,22 @@ final class FakePresenceMonitor: PresenceMonitoring {
     }
 
     func resumeSuspendedStart() {
-        suspendedContinuation?.resume()
-        suspendedContinuation = nil
+        guard !suspendedQueue.isEmpty else { return }
+        let next = suspendedQueue.removeFirst()
+        next.continuation.resume()
     }
 
+    /// Actively unblocks any suspended start continuations at most once and marks them aborted
+    /// so hung tasks terminate cleanly without leaking or double-resuming CheckedContinuation.
     func releaseAllSuspendedStarts() {
         shouldSuspendNextStart = false
-        resumeSuspendedStart()
+        guard !suspendedQueue.isEmpty else { return }
+        let pending = suspendedQueue
+        suspendedQueue.removeAll()
+        for item in pending {
+            abortedSuspensionIDs.insert(item.id)
+            item.continuation.resume()
+        }
     }
 
     func start(calibration: Calibration, generation: UUID) async throws {
@@ -116,8 +215,12 @@ final class FakePresenceMonitor: PresenceMonitoring {
 
         if shouldSuspendNextStart {
             shouldSuspendNextStart = false
+            let suspensionID = UUID()
             await withCheckedContinuation { continuation in
-                suspendedContinuation = continuation
+                self.suspendedQueue.append(PendingSuspension(id: suspensionID, continuation: continuation))
+            }
+            if abortedSuspensionIDs.remove(suspensionID) != nil {
+                throw CancellationError()
             }
         }
 

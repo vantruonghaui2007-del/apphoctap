@@ -310,25 +310,14 @@ final class CoordinatorTests: XCTestCase {
 
     private func awaitTaskWithTimeout<T: Sendable>(
         _ task: Task<T, Never>,
-        timeoutNanoseconds: UInt64 = 1_500_000_000
+        timeoutNanoseconds: UInt64 = 1_500_000_000,
+        onTimeout: @escaping @MainActor () -> Void = {}
     ) async -> T? {
-        await withTaskGroup(of: T?.self) { group in
-            group.addTask {
-                await withTaskCancellationHandler {
-                    await task.value
-                } onCancel: {
-                    task.cancel()
-                }
-            }
-            group.addTask {
-                try? await Task.sleep(nanoseconds: timeoutNanoseconds)
-                return nil
-            }
-            let first = await group.next() ?? nil
-            task.cancel()
-            group.cancelAll()
-            return first
-        }
+        await BoundedAsyncWaiter.waitForTask(
+            task,
+            timeoutNanoseconds: timeoutNanoseconds,
+            onTimeout: onTimeout
+        )
     }
 
     func testResumeCameraStartSuspendedThenEndEarlyLeavesCameraStopped() async throws {
@@ -370,7 +359,10 @@ final class CoordinatorTests: XCTestCase {
         // Now allow the delayed camera start to finish AFTER terminal transition
         presence.resumeSuspendedStart()
 
-        let finishedInTime = await awaitTaskWithTimeout(endTask)
+        let finishedInTime = await awaitTaskWithTimeout(
+            endTask,
+            onTimeout: { presence.releaseAllSuspendedStarts() }
+        )
         XCTAssertEqual(finishedInTime, true, "endEarly must finish promptly once delayed camera start resumes")
 
         XCTAssertFalse(presence.isCapturing, "Camera must NOT stay running after session ended")
@@ -645,6 +637,60 @@ final class CoordinatorTests: XCTestCase {
 
         XCTAssertNil(coordinator.snapshot)
         XCTAssertFalse(failingDriver.isRunning)
+        XCTAssertFalse(idle.isAwakeDisabled)
+    }
+
+    func testBoundedWaitTimeoutExitsPromptlyWhenContinuationNeverResumedAndCleansUpOnce() async throws {
+        let systemClock = SystemSessionClock()
+        let clock = FakeClock(monotonicSeconds: 0)
+        let lock = FakeGuidedAccessMonitor(isEnabled: true)
+        let presence = FakePresenceMonitor()
+        defer { presence.releaseAllSuspendedStarts() }
+        let repo = MockSessionRepository()
+        let idle = FakeIdleTimerController()
+        let coordinator = makeCoordinator(clock: clock, lock: lock, presence: presence, repo: repo, idle: idle)
+
+        presence.suspendNextStart()
+        let cfg = try cameraConfig()
+        let hungStartTask = Task { () -> Bool in
+            do {
+                try await coordinator.start(configuration: cfg, calibration: .defaultCentered)
+                return true
+            } catch {
+                return false
+            }
+        }
+
+        let didSuspend = await presence.waitUntilStartSuspended()
+        XCTAssertTrue(didSuspend)
+        XCTAssertEqual(presence.pendingSuspendedCount, 1)
+
+        // Deliberately do NOT resume presence.start; bounded waiter must still return nil promptly
+        // and actively release the continuation without hanging or double-resuming.
+        let t0 = systemClock.now().monotonicSeconds
+        let result = await awaitTaskWithTimeout(
+            hungStartTask,
+            timeoutNanoseconds: 150_000_000,
+            onTimeout: {
+                presence.releaseAllSuspendedStarts()
+            }
+        )
+        let elapsed = systemClock.now().monotonicSeconds - t0
+
+        XCTAssertNil(result, "Waiter must time out when continuation was not resumed before deadline")
+        XCTAssertLessThan(elapsed, 1.5, "Waiter must not hang waiting on uncancelled CheckedContinuation")
+        XCTAssertEqual(presence.pendingSuspendedCount, 0)
+
+        // Repeated cleanup/resume calls must be safe no-ops (never double-resuming continuation)
+        presence.releaseAllSuspendedStarts()
+        presence.resumeSuspendedStart()
+
+        for _ in 0..<40 where coordinator.isStarting {
+            try? await Task.sleep(nanoseconds: 5_000_000)
+        }
+        XCTAssertFalse(coordinator.isStarting)
+        XCTAssertNil(coordinator.snapshot)
+        XCTAssertFalse(presence.isCapturing)
         XCTAssertFalse(idle.isAwakeDisabled)
     }
 }
