@@ -4,6 +4,7 @@ import StudyCore
 public struct CompletionView: View {
     let record: SessionRecord
     let isGuidedAccessEnabled: Bool
+    let isFinalizing: Bool
     let persistenceWarning: String?
     let onDone: () -> Void
 
@@ -12,11 +13,13 @@ public struct CompletionView: View {
     public init(
         record: SessionRecord,
         isGuidedAccessEnabled: Bool,
+        isFinalizing: Bool = false,
         persistenceWarning: String?,
         onDone: @escaping () -> Void
     ) {
         self.record = record
         self.isGuidedAccessEnabled = isGuidedAccessEnabled
+        self.isFinalizing = isFinalizing
         self.persistenceWarning = persistenceWarning
         self.onDone = onDone
     }
@@ -51,13 +54,23 @@ public struct CompletionView: View {
 
                 breakdownCard
 
+                if isFinalizing {
+                    HStack(spacing: 8) {
+                        ProgressView()
+                        Text("Đang lưu kết quả và giải phóng tài nguyên phiên học...")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
                 Button(action: onDone) {
-                    Text("Về màn hình chính")
+                    Text(isFinalizing ? "Đang hoàn tất phiên..." : "Về màn hình chính")
                         .font(.headline)
                         .frame(maxWidth: .infinity, minHeight: Theme.minTouchSize)
                 }
                 .buttonStyle(.borderedProminent)
                 .tint(Theme.accentTeal)
+                .disabled(isFinalizing)
                 .accessibilityIdentifier("summary.done")
             }
             .padding()

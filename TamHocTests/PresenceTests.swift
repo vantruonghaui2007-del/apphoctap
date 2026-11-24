@@ -392,4 +392,38 @@ final class PresenceTests: XCTestCase {
         }
         XCTAssertNil(monitor.previewCaptureSession)
     }
+
+    func testDeactivateIfMatchingTokenPreservesNewerRunToken() throws {
+        struct InstantDetector: PersonDetecting {
+            func detect(pixelBuffer: CVPixelBuffer, orientation: CGImagePropertyOrientation, calibration: Calibration) throws -> PresenceValue {
+                .present
+            }
+        }
+
+        let clock = FakeClock(monotonicSeconds: 0)
+        var emitted: [PresenceMonitorEvent] = []
+        let coordinator = FrameAnalysisCoordinator(clock: clock, detector: InstantDetector()) { event in
+            emitted.append(event)
+        }
+
+        let oldGen = UUID()
+        let oldToken = UUID()
+        coordinator.prepareRun(generation: oldGen, token: oldToken)
+        XCTAssertTrue(coordinator.activateIfPending(generation: oldGen, token: oldToken, calibration: .defaultCentered, thermalState: .nominal))
+
+        // Newer start supersedes oldToken
+        let newGen = UUID()
+        let newToken = UUID()
+        coordinator.prepareRun(generation: newGen, token: newToken)
+        XCTAssertTrue(coordinator.activateIfPending(generation: newGen, token: newToken, calibration: .defaultCentered, thermalState: .nominal))
+
+        // Late cleanup of oldToken or oldGen must NOT deactivate newToken
+        coordinator.deactivateIfMatching(token: oldToken)
+        coordinator.deactivateIfMatching(generation: oldGen)
+
+        let frame = try makeSolidBGRA(brightness: 180)
+        XCTAssertTrue(coordinator.processFrame(frame))
+        XCTAssertEqual(emitted.count, 1)
+        XCTAssertEqual(emitted.first?.generation, newGen)
+    }
 }

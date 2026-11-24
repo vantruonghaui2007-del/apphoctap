@@ -517,4 +517,92 @@ final class CoordinatorTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(presence.stopCount, 1)
         XCTAssertFalse(idle.isAwakeDisabled)
     }
+
+    func testSessionBCannotStartWhileSessionAFinalizationPendingThenRunsCleanly() async throws {
+        let clock = FakeClock(monotonicSeconds: 0)
+        let lock = FakeGuidedAccessMonitor(isEnabled: true)
+        let presence = FakePresenceMonitor()
+        defer { presence.releaseAllSuspendedStarts() }
+        let repo = MockSessionRepository()
+        let coordinator = makeCoordinator(clock: clock, lock: lock, presence: presence, repo: repo)
+
+        // Start Session A, pause, and suspend camera restart
+        try await coordinator.start(configuration: try cameraConfig(seconds: 180), calibration: .defaultCentered)
+        let sessionAInitialToken = try XCTUnwrap(presence.lastStartedGeneration)
+
+        clock.advance(by: 5)
+        coordinator.receiveActivity(.inactive)
+        try? await Task.sleep(nanoseconds: 25_000_000)
+
+        presence.suspendNextStart()
+        clock.advance(by: 5)
+        coordinator.receiveActivity(.active)
+        XCTAssertTrue(await presence.waitUntilStartSuspended())
+        let sessionAResumeToken = try XCTUnwrap(presence.lastStartedGeneration)
+
+        // Trigger terminal on Session A while resume is still pending
+        lock.send(false)
+        for _ in 0..<40 where coordinator.lastCompletedRecord == nil {
+            try? await Task.sleep(nanoseconds: 5_000_000)
+        }
+        XCTAssertEqual(coordinator.lastCompletedRecord?.status, .endedEarly(.lockReleased))
+        XCTAssertTrue(coordinator.isFinalizing)
+
+        // Re-enable lock and clear summary early; Session B MUST be blocked while A is finalizing
+        lock.send(true)
+        coordinator.clearCompletedSummary()
+
+        do {
+            try await coordinator.start(configuration: try cameraConfig(seconds: 180), calibration: .defaultCentered)
+            XCTFail("Expected CoordinatorError.previousSessionFinalizing while Session A cleanup is still running")
+        } catch let err as CoordinatorError {
+            XCTAssertEqual(err, .previousSessionFinalizing)
+        }
+
+        // Complete Session A's delayed camera start and wait for finalization to finish
+        presence.resumeSuspendedStart()
+        await coordinator.waitForFinalization()
+        XCTAssertFalse(coordinator.isFinalizing)
+        XCTAssertFalse(presence.isCapturing)
+
+        // Now Session B starts cleanly
+        clock.advance(by: 2)
+        try await coordinator.start(configuration: try cameraConfig(seconds: 180), calibration: .defaultCentered)
+        XCTAssertTrue(presence.isCapturing)
+
+        // Late token-scoped stops from Session A must NEVER stop Session B's camera
+        await presence.stop(generation: sessionAInitialToken)
+        await presence.stop(generation: sessionAResumeToken)
+        XCTAssertTrue(presence.isCapturing)
+
+        await coordinator.endEarly()
+        XCTAssertFalse(presence.isCapturing)
+    }
+
+    func testAllTerminalReasonsResetIsFinalizingForSubsequentSessions() async throws {
+        let clock = FakeClock(monotonicSeconds: 100)
+        let lock = FakeGuidedAccessMonitor(isEnabled: true)
+        let presence = FakePresenceMonitor()
+        let repo = MockSessionRepository()
+        let coordinator = makeCoordinator(clock: clock, lock: lock, presence: presence, repo: repo)
+
+        // 1. clockFailure terminal path resets isFinalizing
+        try await coordinator.start(configuration: try timerConfig(seconds: 120), calibration: nil)
+        clock.set(monotonicSeconds: 50) // backward monotonic -> clockFailure
+        coordinator.receiveActivity(.inactive)
+        coordinator.receiveActivity(.active)
+        await coordinator.waitForFinalization()
+        XCTAssertEqual(coordinator.lastCompletedRecord?.status, .endedEarly(.clockFailure))
+        XCTAssertFalse(coordinator.isFinalizing)
+
+        // 2. Subsequent session starts cleanly and completes at deadline, resetting isFinalizing
+        coordinator.clearCompletedSummary()
+        clock.set(monotonicSeconds: 200)
+        try await coordinator.start(configuration: try timerConfig(seconds: 120), calibration: nil)
+        clock.advance(by: 130)
+        coordinator.receiveActivity(.inactive)
+        await coordinator.waitForFinalization()
+        XCTAssertEqual(coordinator.lastCompletedRecord?.status, .completed)
+        XCTAssertFalse(coordinator.isFinalizing)
+    }
 }

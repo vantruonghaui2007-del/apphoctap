@@ -18,7 +18,14 @@ public struct PresenceMonitorEvent: Equatable, Sendable {
 public protocol PresenceMonitoring: AnyObject {
     var events: AsyncStream<PresenceMonitorEvent> { get }
     func start(calibration: Calibration, generation: UUID) async throws
+    func stop(generation: UUID) async
     func stop() async
+}
+
+public extension PresenceMonitoring {
+    func stop(generation: UUID) async {
+        await stop()
+    }
 }
 
 public enum PresenceMonitorError: Error, Equatable {
@@ -78,6 +85,7 @@ final class FrameAnalysisCoordinator: @unchecked Sendable {
 
     private var activeGeneration: UUID?
     private var activeRunToken: UUID?
+    private var pendingGeneration: UUID?
     private var pendingRunToken: UUID?
     private var calibration: Calibration?
     private var isInflight = false
@@ -95,8 +103,9 @@ final class FrameAnalysisCoordinator: @unchecked Sendable {
         self.emitHandler = emitHandler
     }
 
-    func prepareRun(token: UUID) {
+    func prepareRun(generation: UUID, token: UUID) {
         lock.lock()
+        self.pendingGeneration = generation
         self.pendingRunToken = token
         lock.unlock()
     }
@@ -109,8 +118,9 @@ final class FrameAnalysisCoordinator: @unchecked Sendable {
     ) -> Bool {
         lock.lock()
         defer { lock.unlock() }
-        guard self.pendingRunToken == token else { return false }
+        guard self.pendingRunToken == token, self.pendingGeneration == generation else { return false }
         self.pendingRunToken = nil
+        self.pendingGeneration = nil
         self.activeRunToken = token
         self.activeGeneration = generation
         self.calibration = calibration
@@ -123,6 +133,7 @@ final class FrameAnalysisCoordinator: @unchecked Sendable {
     func activate(generation: UUID, calibration: Calibration, thermalState: ProcessInfo.ThermalState) {
         lock.lock()
         self.pendingRunToken = nil
+        self.pendingGeneration = nil
         self.activeRunToken = UUID()
         self.activeGeneration = generation
         self.calibration = calibration
@@ -136,10 +147,41 @@ final class FrameAnalysisCoordinator: @unchecked Sendable {
     func deactivate() {
         lock.lock()
         self.pendingRunToken = nil
+        self.pendingGeneration = nil
         self.activeRunToken = nil
         self.activeGeneration = nil
         self.calibration = nil
         self.isInflight = false
+        lock.unlock()
+    }
+
+    func deactivateIfMatching(token: UUID) {
+        lock.lock()
+        if self.pendingRunToken == token {
+            self.pendingRunToken = nil
+            self.pendingGeneration = nil
+        }
+        if self.activeRunToken == token {
+            self.activeRunToken = nil
+            self.activeGeneration = nil
+            self.calibration = nil
+            self.isInflight = false
+        }
+        lock.unlock()
+    }
+
+    func deactivateIfMatching(generation: UUID) {
+        lock.lock()
+        if self.pendingGeneration == generation {
+            self.pendingRunToken = nil
+            self.pendingGeneration = nil
+        }
+        if self.activeGeneration == generation {
+            self.activeRunToken = nil
+            self.activeGeneration = nil
+            self.calibration = nil
+            self.isInflight = false
+        }
         lock.unlock()
     }
 
@@ -278,10 +320,11 @@ public final class CameraPresenceMonitor: PresenceMonitoring {
     private let analysisQueue = DispatchQueue(label: "vn.tamhoc.camera.analysis", qos: .userInitiated)
 
     private var captureSession: AVCaptureSession?
-    private var pendingSetupSession: AVCaptureSession?
+    private var pendingSetupSession: (generation: UUID, token: UUID, session: AVCaptureSession)?
     private var sampleDelegate: CaptureSampleDelegate?
     private var observerBox: NotificationObserverBox?
     private var activeGeneration: UUID?
+    private var desiredGeneration: UUID?
     private var desiredRunToken: UUID?
 
     /// Available only for CalibrationView live preview; never shown during FocusView.
@@ -315,6 +358,7 @@ public final class CameraPresenceMonitor: PresenceMonitoring {
     public func start(calibration: Calibration, generation: UUID) async throws {
         let runToken = UUID()
         desiredRunToken = runToken
+        desiredGeneration = generation
 
         // Check authorization and request only when camera mode is actively started
         switch authorizer.authorizationStatus() {
@@ -326,38 +370,53 @@ public final class CameraPresenceMonitor: PresenceMonitoring {
                 throw CancellationError()
             }
             guard granted else {
-                desiredRunToken = nil
+                if desiredRunToken == runToken {
+                    desiredRunToken = nil
+                    desiredGeneration = nil
+                }
                 throw PresenceMonitorError.permissionDenied
             }
         case .denied:
-            desiredRunToken = nil
+            if desiredRunToken == runToken {
+                desiredRunToken = nil
+                desiredGeneration = nil
+            }
             throw PresenceMonitorError.permissionDenied
         case .restricted:
-            desiredRunToken = nil
+            if desiredRunToken == runToken {
+                desiredRunToken = nil
+                desiredGeneration = nil
+            }
             throw PresenceMonitorError.permissionRestricted
         }
 
         guard authorizer.hasFrontCamera() else {
-            desiredRunToken = nil
+            if desiredRunToken == runToken {
+                desiredRunToken = nil
+                desiredGeneration = nil
+            }
             throw PresenceMonitorError.cameraUnavailable
         }
 
         // Tear down any previous session cleanly while preserving our new desiredRunToken
-        await teardownSessionOnQueue()
+        await teardownSessionOnQueue(preservingToken: runToken)
         guard desiredRunToken == runToken, !Task.isCancelled else {
             throw CancellationError()
         }
 
         let thermal = thermalStateProvider()
         if thermal == .critical {
-            desiredRunToken = nil
+            if desiredRunToken == runToken {
+                desiredRunToken = nil
+                desiredGeneration = nil
+            }
             throw PresenceMonitorError.thermalCritical
         }
 
         let session = AVCaptureSession()
         let delegate = CaptureSampleDelegate(coordinator: frameCoordinator)
-        pendingSetupSession = session
-        frameCoordinator.prepareRun(token: runToken)
+        pendingSetupSession = (generation: generation, token: runToken, session: session)
+        frameCoordinator.prepareRun(generation: generation, token: runToken)
 
         let configured = await configureAndStartSession(
             session: session,
@@ -368,18 +427,22 @@ public final class CameraPresenceMonitor: PresenceMonitoring {
             thermal: thermal
         )
 
-        if pendingSetupSession === session {
+        if pendingSetupSession?.token == runToken {
             pendingSetupSession = nil
         }
 
         guard desiredRunToken == runToken, !Task.isCancelled else {
-            frameCoordinator.deactivate()
+            frameCoordinator.deactivateIfMatching(token: runToken)
             await stopSessionOnQueue(session)
             throw CancellationError()
         }
 
         guard configured else {
-            desiredRunToken = nil
+            frameCoordinator.deactivateIfMatching(token: runToken)
+            if desiredRunToken == runToken {
+                desiredRunToken = nil
+                desiredGeneration = nil
+            }
             throw PresenceMonitorError.cameraUnavailable
         }
 
@@ -389,26 +452,62 @@ public final class CameraPresenceMonitor: PresenceMonitoring {
         installObservers(for: session)
     }
 
-    public func stop() async {
-        desiredRunToken = nil
-        await teardownSessionOnQueue()
+    public func stop(generation: UUID) async {
+        frameCoordinator.deactivateIfMatching(generation: generation)
+        if desiredGeneration == generation {
+            desiredGeneration = nil
+            desiredRunToken = nil
+        }
+
+        var sessionsToStop: [AVCaptureSession] = []
+        if let pending = pendingSetupSession, pending.generation == generation {
+            pendingSetupSession = nil
+            sessionsToStop.append(pending.session)
+        }
+        if activeGeneration == generation {
+            activeGeneration = nil
+            observerBox?.invalidate()
+            observerBox = nil
+            sampleDelegate = nil
+            if let running = captureSession {
+                captureSession = nil
+                if !sessionsToStop.contains(where: { $0 === running }) {
+                    sessionsToStop.append(running)
+                }
+            }
+        }
+
+        for session in sessionsToStop {
+            await stopSessionOnQueue(session)
+        }
     }
 
-    private func teardownSessionOnQueue() async {
+    public func stop() async {
+        desiredRunToken = nil
+        desiredGeneration = nil
+        await teardownSessionOnQueue(preservingToken: nil)
+    }
+
+    private func teardownSessionOnQueue(preservingToken: UUID?) async {
         activeGeneration = nil
-        frameCoordinator.deactivate()
+        if preservingToken == nil {
+            frameCoordinator.deactivate()
+        }
         observerBox?.invalidate()
         observerBox = nil
 
         let pending = pendingSetupSession
+        if pending != nil && pending?.token != preservingToken {
+            pendingSetupSession = nil
+        }
         let running = captureSession
         captureSession = nil
         sampleDelegate = nil
 
-        if let pending = pending {
-            await stopSessionOnQueue(pending)
+        if let pendingSession = pending?.session, pending?.token != preservingToken {
+            await stopSessionOnQueue(pendingSession)
         }
-        if let running = running, running !== pending {
+        if let running = running, running !== pending?.session {
             await stopSessionOnQueue(running)
         }
     }

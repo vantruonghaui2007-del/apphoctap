@@ -64,6 +64,7 @@ private struct RootAppView: View {
                 CompletionView(
                     record: completed,
                     isGuidedAccessEnabled: sessionViewModel.isGuidedAccessEnabled,
+                    isFinalizing: sessionViewModel.isFinalizing,
                     persistenceWarning: sessionViewModel.persistenceWarningMessage
                 ) {
                     activeRoute = nil

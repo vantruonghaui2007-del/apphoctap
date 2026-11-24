@@ -68,6 +68,7 @@ final class FakePresenceMonitor: PresenceMonitoring {
     var startCount = 0
     var stopCount = 0
     var isCapturing = false
+    var activeCapturingGeneration: UUID?
     var lastStartedGeneration: UUID?
     var startedGenerations: [UUID] = []
     var startDelayNanoseconds: UInt64 = 0
@@ -135,11 +136,21 @@ final class FakePresenceMonitor: PresenceMonitoring {
             return
         }
         isCapturing = true
+        activeCapturingGeneration = generation
+    }
+
+    func stop(generation: UUID) async {
+        stopCount += 1
+        if activeCapturingGeneration == generation {
+            isCapturing = false
+            activeCapturingGeneration = nil
+        }
     }
 
     func stop() async {
         stopCount += 1
         isCapturing = false
+        activeCapturingGeneration = nil
     }
 
     func emit(_ sample: PresenceSample, generation: UUID) {

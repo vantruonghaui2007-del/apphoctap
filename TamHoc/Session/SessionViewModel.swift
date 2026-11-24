@@ -10,6 +10,7 @@ public final class SessionViewModel: ObservableObject {
     @Published public private(set) var persistenceWarningMessage: String?
     @Published public private(set) var errorMessage: String?
     @Published public private(set) var isGuidedAccessEnabled: Bool = false
+    @Published public private(set) var isFinalizing: Bool = false
 
     public let coordinator: SessionCoordinator
     private let lockMonitor: GuidedAccessMonitoring
@@ -31,6 +32,8 @@ public final class SessionViewModel: ObservableObject {
             .assign(to: &$persistenceWarningMessage)
         coordinator.$lastErrorMessage
             .assign(to: &$errorMessage)
+        coordinator.$isFinalizing
+            .assign(to: &$isFinalizing)
 
         startObserving()
     }
@@ -66,6 +69,9 @@ public final class SessionViewModel: ObservableObject {
         do {
             try await coordinator.start(configuration: configuration, calibration: calibration)
             return true
+        } catch CoordinatorError.previousSessionFinalizing {
+            errorMessage = "Đang hoàn tất dọn dẹp phiên học trước, vui lòng đợi trong giây lát."
+            return false
         } catch CoordinatorError.guidedAccessRequired {
             errorMessage = "Hãy bật Guided Access trên iPhone trước khi bắt đầu phiên học nghiêm."
             return false
