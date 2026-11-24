@@ -352,7 +352,8 @@ final class CoordinatorTests: XCTestCase {
         presence.suspendNextStart()
         clock.advance(by: 5)
         coordinator.receiveActivity(.active)
-        XCTAssertTrue(await presence.waitUntilStartSuspended())
+        let didSuspendResume = await presence.waitUntilStartSuspended()
+        XCTAssertTrue(didSuspendResume)
 
         // Request endEarly concurrently while resume start is still suspended
         let endTask = Task { () -> Bool in
@@ -398,7 +399,8 @@ final class CoordinatorTests: XCTestCase {
         presence.suspendNextStart()
         clock.advance(by: 5)
         coordinator.receiveActivity(.active)
-        XCTAssertTrue(await presence.waitUntilStartSuspended())
+        let didSuspendResume = await presence.waitUntilStartSuspended()
+        XCTAssertTrue(didSuspendResume)
 
         coordinator.receiveActivity(.inactive)
         presence.resumeSuspendedStart()
@@ -436,7 +438,8 @@ final class CoordinatorTests: XCTestCase {
         let task1 = Task {
             try await coordinator.start(configuration: cfg, calibration: .defaultCentered)
         }
-        XCTAssertTrue(await presence.waitUntilStartSuspended())
+        let didSuspendInitial = await presence.waitUntilStartSuspended()
+        XCTAssertTrue(didSuspendInitial)
         coordinator.receiveActivity(.inactive)
         presence.resumeSuspendedStart()
 
@@ -537,7 +540,8 @@ final class CoordinatorTests: XCTestCase {
         presence.suspendNextStart()
         clock.advance(by: 5)
         coordinator.receiveActivity(.active)
-        XCTAssertTrue(await presence.waitUntilStartSuspended())
+        let didSuspendSessionA = await presence.waitUntilStartSuspended()
+        XCTAssertTrue(didSuspendSessionA)
         let sessionAResumeToken = try XCTUnwrap(presence.lastStartedGeneration)
 
         // Trigger terminal on Session A while resume is still pending
