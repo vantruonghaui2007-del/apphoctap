@@ -44,6 +44,32 @@ final class GuidedAccessTests: XCTestCase {
         XCTAssertFalse(monitor.isEnabled)
     }
 
+    private func awaitFirstStreamValue(
+        from monitor: GuidedAccessMonitor,
+        timeoutNanoseconds: UInt64,
+        afterSubscribing action: () -> Void
+    ) async -> Bool? {
+        let stream = monitor.changes
+        XCTAssertEqual(monitor.subscriberCountForTesting, 1)
+        action()
+
+        return await withTaskGroup(of: Bool?.self) { group in
+            group.addTask {
+                for await value in stream {
+                    return value
+                }
+                return nil
+            }
+            group.addTask {
+                try? await Task.sleep(nanoseconds: timeoutNanoseconds)
+                return nil
+            }
+            let first = await group.next() ?? nil
+            group.cancelAll()
+            return first
+        }
+    }
+
     func testReadingIsEnabledBeforeNotificationDoesNotDropChangeEvent() async throws {
         var systemValue = true
         let center = NotificationCenter()
@@ -54,38 +80,47 @@ final class GuidedAccessTests: XCTestCase {
             notificationName: noteName
         )
 
-        let stream = monitor.changes
-        let receivedTask = Task<Bool?, Never> {
-            for await value in stream {
-                return value
-            }
-            return nil
+        let result = await awaitFirstStreamValue(
+            from: monitor,
+            timeoutNanoseconds: 1_000_000_000
+        ) {
+            // Flip system status and read isEnabled BEFORE notification runs
+            systemValue = false
+            XCTAssertFalse(monitor.isEnabled)
+            center.post(name: noteName, object: nil)
         }
 
-        // Wait until subscription is active
-        for _ in 0..<20 where monitor.subscriberCountForTesting == 0 {
+        XCTAssertEqual(result, false)
+        for _ in 0..<20 where monitor.subscriberCountForTesting > 0 {
             try? await Task.sleep(nanoseconds: 5_000_000)
         }
-        XCTAssertEqual(monitor.subscriberCountForTesting, 1)
+        XCTAssertEqual(monitor.subscriberCountForTesting, 0)
+    }
 
-        // Flip system status and read isEnabled BEFORE notification runs
-        systemValue = false
-        XCTAssertFalse(monitor.isEnabled)
+    func testStreamWaitTimeoutExitsPromptlyAndCleansUpSubscriberWhenNoNotificationPosted() async {
+        let systemClock = SystemSessionClock()
+        let monitor = GuidedAccessMonitor(
+            statusProvider: { true },
+            notificationCenter: NotificationCenter(),
+            notificationName: Notification.Name("TestNeverPostedGuidedAccess")
+        )
 
-        center.post(name: noteName, object: nil)
-
-        // Bounded wait so regression cannot hang test suite
-        let result = await withTaskGroup(of: Bool?.self) { group in
-            group.addTask { await receivedTask.value }
-            group.addTask {
-                try? await Task.sleep(nanoseconds: 1_000_000_000)
-                return nil
-            }
-            let first = await group.next() ?? nil
-            group.cancelAll()
-            return first
+        let start = systemClock.now().monotonicSeconds
+        let result = await awaitFirstStreamValue(
+            from: monitor,
+            timeoutNanoseconds: 150_000_000
+        ) {
+            // Deliberately do NOT post any notification
         }
-        XCTAssertEqual(result, false)
+        let elapsed = systemClock.now().monotonicSeconds - start
+
+        XCTAssertNil(result)
+        XCTAssertLessThan(elapsed, 1.5, "Timeout helper must exit within bounded duration without hanging")
+
+        for _ in 0..<20 where monitor.subscriberCountForTesting > 0 {
+            try? await Task.sleep(nanoseconds: 5_000_000)
+        }
+        XCTAssertEqual(monitor.subscriberCountForTesting, 0, "Structured cancellation must remove stream subscriber")
     }
 
     func testDuplicateLifecycleEventsAreCoalesced() async {
